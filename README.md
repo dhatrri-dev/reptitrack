@@ -3,14 +3,14 @@
 A logistics and shipment management system designed for tracking operational lifecycles and financial data. Built as a full-stack application using Node.js, React, and MySQL.
 
 ## Overview
-ReptiTrack provides a centralized platform for logistics operations, focusing on shipment integrity, customer management, and financial reporting. The system uses a normalized relational database to maintain consistency across shipment statuses and payment records.
+ReptiTrack provides a centralized platform for logistics operations, focusing on shipment tracking, customer management, and financial reporting. The system uses a normalized relational database to maintain consistency across shipment statuses and payment records.
 
 ## Core Modules
 
 ### 📦 Shipment Management
 - **Lifecycle Tracking**: Full CRUD capability for shipments with state-based status updates (Pending, In Transit, Delivered).
 - **Receiver Registry**: Dedicated management for delivery endpoints and contact points to ensure data reusability.
-- **History Tracking**: Event-driven tracking logic to monitor shipment progression over time.
+- **Tracking History**: Status-based tracking logic to monitor shipment progression over time.
 
 ### 💰 Financial Integration
 - **Cost Calculation**: Automated revenue and cost tracking using SQL JOINs to correlate shipments with billing data.
@@ -18,20 +18,18 @@ ReptiTrack provides a centralized platform for logistics operations, focusing on
 - **Currency Normalization**: Consistent financial reporting localized for standard logistics operations.
 
 ### 📊 Operations Dashboard
-- **Data Visualization**: Real-time rendering of operational KPIs (Total Shipments, Revenue, Success Rates) using Recharts.
+- **Dynamic Visualization**: Rendering of operational KPIs (Total Shipments, Revenue, Success Rates) using Recharts.
 - **Alert System**: Logic-based notification system that flags delayed shipments and critical status changes.
-- **Metrics Aggregation**: Backend aggregation of database records to provide high-level operational insights.
+- **Metrics Aggregation**: Backend aggregation of database records to provide operational insights.
 
 ## Technical Stack
-
-- **Frontend**: React.js (Component-based UI), Ant Design (System components), Framer Motion (Transitions).
+- **Frontend**: React.js (Component-based UI), Ant Design, Framer Motion.
 - **Backend**: Node.js and Express.js (RESTful API architecture).
 - **Database**: MySQL (Relational schema, indexed for shipment and tracking lookups).
-- **Communication**: Axios for asynchronous client-server interaction.
+- **Communication**: Axios and Fetch for client-server interaction.
 - **Geospatial**: Leaflet integration for shipment coordinate visualization.
 
 ## Project Structure
-
 ```text
 logistics-app/
 ├── client/          # React single-page application
@@ -77,3 +75,6 @@ logistics-app/
 
 ## License
 Distributed under the ISC License.
+
+## Author
+Dhatrri
