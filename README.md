@@ -1,79 +1,55 @@
-# 🦎 ReptiTrack — Next-Gen Logistics & Shipment ERP
+# ReptiTrack
 
-![ReptiTrack Banner](https://img.shields.io/badge/ReptiTrack-Logistics_ERP-blue?style=for-the-badge&logo=react&logoColor=white)
-![Build Version](https://img.shields.io/badge/Version-1.0.0--Stable-green?style=for-the-badge)
-![Tech Stack](https://img.shields.io/badge/Tech_Stack-React_%7C_Node_%7C_MySQL-orange?style=for-the-badge)
+A logistics and shipment management system designed for tracking operational lifecycles and financial data. Built as a full-stack application using Node.js, React, and MySQL.
 
-**ReptiTrack** is a high-performance, full-stack logistics management system designed to streamline shipment tracking, financial reporting, and operational efficiency. Built with a premium aesthetic and enterprise-grade architecture, it provides real-time insights into your supply chain.
+## Overview
+ReptiTrack provides a centralized platform for logistics operations, focusing on shipment integrity, customer management, and financial reporting. The system uses a normalized relational database to maintain consistency across shipment statuses and payment records.
 
----
+## Core Modules
 
-## 🚀 Key Features
+### 📦 Shipment Management
+- **Lifecycle Tracking**: Full CRUD capability for shipments with state-based status updates (Pending, In Transit, Delivered).
+- **Receiver Registry**: Dedicated management for delivery endpoints and contact points to ensure data reusability.
+- **History Tracking**: Event-driven tracking logic to monitor shipment progression over time.
 
-### 📊 Operational Metrics Dashboard
-- **Live Analytics**: Real-time charts powered by `Recharts` and `Framer Motion` for smooth, dynamic data visualization.
-- **Dynamic KPIs**: Track total shipments, active deliveries, revenue flow, and success rates at a glance.
-- **Animated Interactions**: High-end micro-animations and smooth transitions for a premium user experience.
+### 💰 Financial Integration
+- **Cost Calculation**: Automated revenue and cost tracking using SQL JOINs to correlate shipments with billing data.
+- **Payment Lifecycle**: Monitoring of paid, pending, and overdue transactions at the customer level.
+- **Currency Normalization**: Consistent financial reporting localized for standard logistics operations.
 
-### 📦 Lifecycle Shipment Management
-- **Complete CRUD**: Create, Update, and Track shipments with ease.
-- **Real-time Status Tracking**: Monitor shipments from "Pending" to "Delivered" with a detailed event timeline.
-- **Receiver Management**: Dedicated routes for managing delivery endpoints and contacts.
+### 📊 Operations Dashboard
+- **Data Visualization**: Real-time rendering of operational KPIs (Total Shipments, Revenue, Success Rates) using Recharts.
+- **Alert System**: Logic-based notification system that flags delayed shipments and critical status changes.
+- **Metrics Aggregation**: Backend aggregation of database records to provide high-level operational insights.
 
-### 💰 Integrated Payment Tracker
-- **Real-time Cost Data**: Automatically calculates shipment costs and revenue using optimized SQL JOINs.
-- **Financial Status**: Track paid, pending, and overdue payments across all customers.
-- **Currency Support**: Fully localized for professional presentation.
+## Technical Stack
 
-### 🔔 Smart Alert System
-- **Automated Notifications**: System-generated alerts for delayed shipments or critical status changes.
-- **Interactive Panel**: Quick-view panel for managers to address operational bottlenecks instantly.
+- **Frontend**: React.js (Component-based UI), Ant Design (System components), Framer Motion (Transitions).
+- **Backend**: Node.js and Express.js (RESTful API architecture).
+- **Database**: MySQL (Relational schema, indexed for shipment and tracking lookups).
+- **Communication**: Axios for asynchronous client-server interaction.
+- **Geospatial**: Leaflet integration for shipment coordinate visualization.
 
-### 👥 User & Access Control
-- **Role-Based Management**: Scalable user management system with secure authentication.
-- **Admin Dashboard**: Specialized tools for managing personnel and system configurations.
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-- **React.js**: Modern component-based architecture.
-- **Ant Design**: Enterprise-class UI design language.
-- **Framer Motion**: Production-ready motion library.
-- **Recharts**: Composited charting library for data visualization.
-- **Leaflet**: Interactive map integration for shipment tracking.
-
-### Backend
-- **Node.js**: Asynchronous event-driven JavaScript runtime.
-- **Express.js**: Fast, unopinionated, minimalist web framework.
-- **MySQL**: Robust relational database for data integrity.
-- **Axios**: Promise-based HTTP client for API communication.
-
----
-
-## 📂 Project Structure
+## Project Structure
 
 ```text
 logistics-app/
-├── client/          # React Frontend (AntD, Framer Motion)
+├── client/          # React single-page application
 │   ├── src/
-│   │   ├── components/  # Reusable UI components
-│   │   └── pages/       # Dashboard, Tracking, Management
-├── server/          # Node.js Backend (Express, MySQL)
-│   ├── db/          # Database configuration and migrations
-│   ├── routes/      # API endpoints (shipments, stats, auth)
-│   └── scripts/     # Data sync and maintenance utilities
+│   │   ├── components/  # Modular UI elements
+│   │   └── pages/       # Dashboard and management views
+├── server/          # Express.js REST API
+│   ├── db/          # Database connection and schema definitions
+│   ├── routes/      # Endpoint handlers for shipments, payments, and stats
+│   └── scripts/     # Maintenance and data synchronization utilities
 └── README.md
 ```
 
----
-
-## 🚦 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Node.js (v16+)
-- MySQL Server
+- MySQL Server instance
 - npm or yarn
 
 ### Installation
@@ -84,28 +60,20 @@ logistics-app/
    cd reptitrack
    ```
 
-2. **Frontend Setup**
+2. **Backend Setup**
    ```bash
-   cd client
+   cd server
+   npm install
+   # Configure .env with DB_HOST, DB_USER, DB_PASS, and DB_NAME
+   npm start
+   ```
+
+3. **Frontend Setup**
+   ```bash
+   cd ../client
    npm install
    npm start
    ```
 
-3. **Backend Setup**
-   ```bash
-   cd ../server
-   npm install
-   # Configure your .env with DB credentials
-   npm start
-   ```
-
----
-
-## 📄 License
-Distributed under the ISC License. See `LICENSE` for more information.
-
----
-
-<p align="center">
-  Built with ❤️ for Modern Logistics
-</p>
+## License
+Distributed under the ISC License.
