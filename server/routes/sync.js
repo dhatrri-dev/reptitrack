@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// Sync & Repair: Find orphaned shipments and create missing tracking/payment records
+
 router.post('/repair', async (req, res) => {
     try {
         console.log('[SYNC] Starting database audit & repair...');
         
-        // 1. Find shipments without tracking
+        
         const [orphansNoTracking] = await db.query(`
             SELECT s.SHIPMENTID 
             FROM shipment s 
@@ -25,7 +25,7 @@ router.post('/repair', async (req, res) => {
             }
         }
 
-        // 2. Find shipments without payments
+        
         const [orphansNoPayment] = await db.query(`
             SELECT s.SHIPMENTID 
             FROM shipment s 

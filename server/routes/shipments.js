@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// Get all shipments with Sender and Receiver names
+
 router.get('/', async (req, res) => {
     try {
         const role = req.headers['x-user-role'];
@@ -54,7 +54,7 @@ router.get('/', async (req, res) => {
 });
 
 
-// Auto-generated GET schema endpoint to retrieve column names (useful if table is empty)
+
 router.get('/schema/columns', async (req, res) => {
     try {
         const [columns] = await db.query('SHOW COLUMNS FROM shipment');
@@ -64,7 +64,7 @@ router.get('/schema/columns', async (req, res) => {
     }
 });
 
-// Auto-generated POST endpoint to add a new record
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
@@ -79,15 +79,19 @@ router.post('/', async (req, res) => {
         const query = `INSERT INTO shipment (${keys.join(', ')}) VALUES (${placeholders})`;
         
         const [result] = await db.query(query, values);
-        const shipmentId = result.insertId;
+        const shipmentId = data.SHIPMENTID || result.insertId;
 
-        // Auto-create initial tracking
+        
         await db.query(
-            'INSERT INTO tracking (SHIPMENTID, STATUS, LOCATION, TIMESTAMP) VALUES (?, ?, ?, ?)',
-            [shipmentId, 'Booked', 'Origin Warehouse', new Date()]
+            `INSERT INTO tracking (SHIPMENTID, STATUS, LOCATION, TIMESTAMP) 
+             SELECT ?, 'Booked', CONCAT(cp.CITY, ' Warehouse'), ?
+             FROM customer c 
+             JOIN customer_pincode cp ON c.PINCODE = cp.PINCODE 
+             WHERE c.CUSTOMERID = ?`,
+            [shipmentId, new Date(), data.CUSTOMERID]
         );
 
-        // Auto-create initial payment
+        
         await db.query(
             'INSERT INTO payment (SHIPMENTID, PAYMENTSTATUS, PAYMENTDATE, PAYMENTMETHOD, TRANSACTIONID) VALUES (?, ?, ?, ?, ?)',
             [shipmentId, 'Pending', new Date(), 'Not Set', `TXN${shipmentId}${Date.now().toString().slice(-4)}`]
@@ -99,13 +103,19 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT /api/shipments/:id - Edit an existing shipment
+
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { CURRENTSTATUS, PRIORITY, TOTALCOST } = req.body;
         
-        // Use a parameterized update query specifically for the requested fields
+        
+        const [oldShipment] = await db.query('SELECT CURRENTSTATUS FROM shipment WHERE SHIPMENTID = ?', [id]);
+        if (oldShipment.length === 0) return res.status(404).json({ error: 'Shipment not found' });
+        
+        const statusChanged = CURRENTSTATUS && oldShipment[0].CURRENTSTATUS !== CURRENTSTATUS;
+
+        
         const query = `
             UPDATE shipment 
             SET CURRENTSTATUS = ?, PRIORITY = ?, TOTALCOST = ? 
@@ -114,9 +124,27 @@ router.put('/:id', async (req, res) => {
         
         const [result] = await db.query(query, [CURRENTSTATUS, PRIORITY, TOTALCOST, id]);
         
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Shipment not found' });
+        
+        if (statusChanged) {
+            
+            const [shipmentInfo] = await db.query(`
+                SELECT rp.CITY 
+                FROM shipment s
+                JOIN receiver r ON s.RECEIVERID = r.RECEIVERID
+                LEFT JOIN receiver_pincode rp ON r.PINCODE = rp.PINCODE
+                WHERE s.SHIPMENTID = ?
+            `, [id]);
+
+            const location = (CURRENTSTATUS === 'Delivered' || CURRENTSTATUS === 'Out for Delivery') 
+                ? (shipmentInfo[0]?.CITY || 'Destination')
+                : 'Operational Hub';
+
+            await db.query(
+                'INSERT INTO tracking (SHIPMENTID, STATUS, LOCATION, TIMESTAMP) VALUES (?, ?, ?, NOW())',
+                [id, CURRENTSTATUS, location]
+            );
         }
+
         res.json({ message: 'Shipment updated successfully' });
     } catch (err) {
         console.error('[Update Shipment Error]', err.message);
@@ -124,7 +152,7 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// Update shipment status
+
 router.patch('/:id/status', async (req, res) => {
     try {
         const { id } = req.params;
@@ -135,22 +163,43 @@ router.patch('/:id/status', async (req, res) => {
             return res.status(400).json({ error: 'Invalid status value' });
         }
 
+        
+        const [shipmentInfo] = await db.query(`
+            SELECT rp.CITY, s.CURRENTSTATUS
+            FROM shipment s
+            JOIN receiver r ON s.RECEIVERID = r.RECEIVERID
+            LEFT JOIN receiver_pincode rp ON r.PINCODE = rp.PINCODE
+            WHERE s.SHIPMENTID = ?
+        `, [id]);
+
+        if (shipmentInfo.length === 0) {
+            return res.status(404).json({ error: 'Shipment not found' });
+        }
+
+        
         const [result] = await db.query(
             'UPDATE shipment SET CURRENTSTATUS = ? WHERE SHIPMENTID = ?',
             [status, id]
         );
 
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Shipment not found' });
-        }
+        
+        const location = (status === 'Delivered' || status === 'Out for Delivery') 
+            ? (shipmentInfo[0].CITY || 'Destination')
+            : 'Operational Hub'; 
 
-        res.json({ message: 'Status updated successfully', status });
+        await db.query(
+            'INSERT INTO tracking (SHIPMENTID, STATUS, LOCATION, TIMESTAMP) VALUES (?, ?, ?, NOW())',
+            [id, status, location]
+        );
+
+        res.json({ message: 'Status updated and tracking recorded', status });
     } catch (err) {
+        console.error('[Status Update Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
-// GET /api/shipments/:id/timeline - Fetch real tracking updates
+
 router.get('/:id/timeline', async (req, res) => {
     try {
         const { id } = req.params;
@@ -171,7 +220,7 @@ router.get('/:id/timeline', async (req, res) => {
     }
 });
 
-// GET /api/shipments/:id/map - Fetch locations for Leaflet mapping
+
 router.get('/:id/map', async (req, res) => {
     try {
         const { id } = req.params;
@@ -197,34 +246,54 @@ router.get('/:id/map', async (req, res) => {
     }
 });
 
-// Delete a shipment
+
 router.delete('/:id', async (req, res) => {
     try {
         const id = req.params.id;
+        
+        // Check if tracking records still exist for this shipment
+        const [trackingRows] = await db.query('SELECT COUNT(*) as count FROM tracking WHERE SHIPMENTID = ?', [id]);
+        if (trackingRows[0].count > 0) {
+            return res.status(400).json({ 
+                error: `Cannot delete shipment. ${trackingRows[0].count} tracking record(s) still exist. Delete them from the Tracking page first.` 
+            });
+        }
+
+        // Check if payment records still exist for this shipment
+        const [paymentRows] = await db.query('SELECT COUNT(*) as count FROM payment WHERE SHIPMENTID = ?', [id]);
+        if (paymentRows[0].count > 0) {
+            return res.status(400).json({ 
+                error: `Cannot delete shipment. ${paymentRows[0].count} payment record(s) still exist. Delete them from the Payments page first.` 
+            });
+        }
+
+        // Safe to delete — no dependent records
         const [columns] = await db.query('SHOW COLUMNS FROM shipment');
         const primaryKey = columns[0].Field;
         const [result] = await db.query(`DELETE FROM shipment WHERE ${primaryKey} = ?`, [id]);
+        
         if (result.affectedRows === 0) return res.status(404).json({ error: 'Record not found' });
         res.json({ message: 'Record deleted successfully' });
     } catch (err) {
+        console.error('[Delete Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });
 
-// Get shipments for a specific customer (Sent or Received)
+
 router.get('/customer/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { search, status } = req.query;
 
-        // 1. Fetch the customer's email to find shipments where they are the receiver
+        
         const [customer] = await db.query('SELECT EMAIL FROM customer WHERE CUSTOMERID = ?', [id]);
         if (customer.length === 0) {
             return res.status(404).json({ error: 'Customer not found' });
         }
         const userEmail = customer[0].EMAIL;
 
-        // 2. Build the query to find shipments where user is Sender OR Receiver
+        
         const params = [id, userEmail];
         let whereClauses = ['(s.CUSTOMERID = ? OR r.EMAIL = ?)'];
 
@@ -264,7 +333,7 @@ router.get('/customer/:id', async (req, res) => {
     }
 });
 
-// Create shipment with a new or existing receiver
+
 router.post('/create-with-receiver', async (req, res) => {
     try {
         console.log('[Create Shipment DEBUG] Payload:', JSON.stringify(req.body));
@@ -274,14 +343,14 @@ router.post('/create-with-receiver', async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Parse Pincodes to ensure they are integers for the database
+        
         const senderPincode = parseInt(sender?.pincode);
         const receiverPincode = parseInt(receiver?.pincode);
 
-        // 1. Handle Sender Info (Update Customer Profile)
+        
         if (senderPincode) {
-            // Ensure sender pincode exists in lookup table with correct city/state
-            // Only use 'Unknown' if the provided value is empty/falsy
+            
+            
             const city = sender.city?.trim() || 'Unknown';
             const state = sender.state?.trim() || 'Unknown';
             
@@ -292,16 +361,16 @@ router.post('/create-with-receiver', async (req, res) => {
                     STATE = IF(VALUES(STATE) != 'Unknown', VALUES(STATE), STATE)`,
                 [senderPincode, city, state]
             );
-            // Update customer's default address
+            
             await db.query(
                 'UPDATE customer SET STREET = ?, PINCODE = ? WHERE CUSTOMERID = ?',
                 [sender.street, senderPincode, customerId]
             );
         }
 
-        // 2. Handle Receiver (Find or Create)
+        
         let receiverId;
-        // Ensure receiver pincode exists in lookup table with correct city/state
+        
         if (receiverPincode) {
             await db.query(
                 `INSERT INTO receiver_pincode (PINCODE, CITY, STATE) VALUES (?, ?, ?)
@@ -314,7 +383,7 @@ router.post('/create-with-receiver', async (req, res) => {
         
         if (existingReceivers.length > 0) {
             receiverId = existingReceivers[0].RECEIVERID;
-            // Update existing receiver address if changed
+            
             await db.query(
                 'UPDATE receiver SET STREET = ?, PINCODE = ? WHERE RECEIVERID = ?',
                 [receiver.street, receiverPincode, receiverId]
@@ -327,17 +396,17 @@ router.post('/create-with-receiver', async (req, res) => {
             receiverId = newReceiver.insertId;
         }
 
-        // 3. Fetch Service Details
+        
         const [serviceTypes] = await db.query('SELECT * FROM service_type WHERE SERVICETYPEID = ?', [serviceTypeId]);
         if (serviceTypes.length === 0) return res.status(404).json({ error: 'Service type not found' });
         const service = serviceTypes[0];
 
-        // 4. Pick a random Courier
+        
         const [couriers] = await db.query('SELECT COURIERID FROM courier LIMIT 5');
         if (couriers.length === 0) return res.status(500).json({ error: 'No couriers available' });
         const courierId = couriers[Math.floor(Math.random() * couriers.length)].COURIERID;
 
-        // 5. Calculations
+        
         const bookingDate = new Date();
         const expectedDate = new Date();
         expectedDate.setDate(bookingDate.getDate() + (service.DELIVERYDAYS || 3));
@@ -347,7 +416,7 @@ router.post('/create-with-receiver', async (req, res) => {
         if (priority === 'Urgent') priorityMultiplier = 2.0;
         const totalCost = (service.BASERATE || 50) * priorityMultiplier;
 
-        // 6. Insert Shipment
+        
         const shipmentData = {
             BOOKINGDATE: bookingDate.toISOString().split('T')[0],
             CURRENTSTATUS: 'Booked',
@@ -364,15 +433,16 @@ router.post('/create-with-receiver', async (req, res) => {
             Object.values(shipmentData)
         );
 
-        const shipmentId = result.insertId;
+        const shipmentId = result.insertId || shipmentData.SHIPMENTID;
 
-        // 7. Auto-create initial tracking
+        
+        const senderCity = req.body.sender?.city || 'Origin';
         await db.query(
             'INSERT INTO tracking (SHIPMENTID, STATUS, LOCATION, TIMESTAMP) VALUES (?, ?, ?, ?)',
-            [shipmentId, 'Booked', 'Origin Warehouse', new Date()]
+            [shipmentId, 'Booked', `${senderCity} Warehouse`, new Date()]
         );
 
-        // 8. Auto-create initial payment
+        
         await db.query(
             'INSERT INTO payment (SHIPMENTID, PAYMENTSTATUS, PAYMENTDATE, PAYMENTMETHOD, TRANSACTIONID) VALUES (?, ?, ?, ?, ?)',
             [shipmentId, 'Pending', new Date(), 'Not Set', `TXN${shipmentId}${Date.now().toString().slice(-4)}`]
@@ -389,19 +459,6 @@ router.post('/create-with-receiver', async (req, res) => {
     }
 });
 
-// Delete shipment
-router.delete('/:id', async (req, res) => {
-    const { id } = req.params;
-    try {
-        const [result] = await db.query('DELETE FROM shipment WHERE SHIPMENTID = ?', [id]);
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Shipment not found' });
-        }
-        res.json({ message: 'Shipment deleted successfully' });
-    } catch (err) {
-        console.error('Delete error:', err);
-        res.status(500).json({ error: 'Failed to delete shipment' });
-    }
-});
+
 
 module.exports = router;

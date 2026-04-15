@@ -30,7 +30,7 @@ export default function UserManagement() {
         try {
             await axios.put(`${API}/users/${id}/promote`);
             message.success('User promoted to admin successfully');
-            fetchUsers(); // Refresh the list
+            fetchUsers();
         } catch (err) {
             console.error('[Promote Error]', err);
             message.error(err.response?.data?.error || 'Failed to promote user');
@@ -41,7 +41,7 @@ export default function UserManagement() {
         try {
             await axios.delete(`${API}/users/${id}`);
             message.success('User deleted successfully');
-            fetchUsers(); // Refresh the list
+            fetchUsers();
         } catch (err) {
             console.error('[Delete Error]', err);
             message.error(err.response?.data?.error || 'Failed to delete user');

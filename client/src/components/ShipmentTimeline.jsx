@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ClipboardList, Truck, Zap, Package, CheckCircle } from 'lucide-react';
+import { ClipboardList, Truck, Zap, Package, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 
 export default function ShipmentTimeline({ shipmentId }) {
@@ -8,13 +8,36 @@ export default function ShipmentTimeline({ shipmentId }) {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    const steps = [
+    const defaultSteps = [
         { status: 'Booked', icon: <ClipboardList size={18} />, description: 'Shipment has been booked' },
         { status: 'Dispatched', icon: <Truck size={18} />, description: 'Package left the branch' },
         { status: 'In Transit', icon: <Zap size={18} />, description: 'On the way to destination' },
         { status: 'Out for Delivery', icon: <Package size={18} />, description: 'Courier is arriving soon' },
         { status: 'Delivered', icon: <CheckCircle size={18} />, description: 'Successfully delivered' }
     ];
+
+   
+    const isCancelled = history.some(h => h.status.toLowerCase() === 'cancelled');
+    const isDelayed = history.some(h => h.status.toLowerCase() === 'delayed');
+
+   
+    const steps = [...defaultSteps];
+    
+   
+    if (isCancelled) {
+        const deliveredIdx = steps.findIndex(s => s.status === 'Delivered');
+        if (deliveredIdx !== -1) {
+            steps[deliveredIdx] = { status: 'Cancelled', icon: <AlertCircle size={18} />, description: 'Shipment has been cancelled' };
+        }
+    }
+
+   
+    if (isDelayed) {
+        const transitIdx = steps.findIndex(s => s.status === 'In Transit');
+        if (transitIdx !== -1) {
+            steps.splice(transitIdx + 1, 0, { status: 'Delayed', icon: <Clock size={18} />, description: 'Temporary delay in transit' });
+        }
+    }
 
     useEffect(() => {
         const fetchHistory = async () => {
@@ -36,13 +59,13 @@ export default function ShipmentTimeline({ shipmentId }) {
     if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem', padding: '20px' }}>Loading timeline...</div>;
     if (error) return <div style={{ color: '#ef4444', fontSize: '0.9rem', padding: '20px' }}>{error}</div>;
 
-    // Mapping logic: 
-    // Find the latest occurrence of each step in the history
+   
+   
     const getStepStatus = (stepName) => {
         return history.find(h => h.status.toLowerCase() === stepName.toLowerCase());
     };
 
-    // Find the index of the latest completed step
+   
     let lastCompletedIndex = -1;
     steps.forEach((step, idx) => {
         if (getStepStatus(step.status)) {
@@ -52,7 +75,7 @@ export default function ShipmentTimeline({ shipmentId }) {
 
     return (
         <div style={{ marginTop: '32px', position: 'relative', paddingLeft: '40px' }}>
-            {/* Vertical Line */}
+            {}
             <div style={{ 
                 position: 'absolute', left: '15px', top: '10px', bottom: '10px', 
                 width: '3px', background: 'var(--border-color)', borderRadius: '2px' 
@@ -65,7 +88,7 @@ export default function ShipmentTimeline({ shipmentId }) {
 
                 return (
                     <div key={idx} style={{ position: 'relative', marginBottom: '32px' }}>
-                        {/* Step Marker */}
+                        {}
                         <div style={{
                             position: 'absolute', left: '-40px', top: '0', 
                             width: '34px', height: '34px', borderRadius: '12px',
@@ -78,7 +101,7 @@ export default function ShipmentTimeline({ shipmentId }) {
                             {isCompleted ? '✓' : idx + 1}
                         </div>
 
-                        {/* Step Content */}
+                        {}
                         <div style={{ opacity: isCompleted ? 1 : 0.5 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <h4 style={{ 

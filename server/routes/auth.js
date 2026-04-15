@@ -7,18 +7,18 @@ router.post('/register', async (req, res) => {
         const { email, password, fullName } = req.body;
         if (!email || !password || !fullName) return res.status(400).json({ error: 'Email, password, and Full Name are required' });
         
-        // Check if user exists
+        
         const [existing] = await db.query('SELECT * FROM USERS WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(400).json({ error: 'This email is already registered. Try logging in!' });
         
-        // 1. Create a matching Customer profile with the captured Full Name and Email
+        
         const [customerResult] = await db.query(
             'INSERT INTO CUSTOMER (NAME, EMAIL, REGISTRATIONDATE, STATUS) VALUES (?, ?, CURRENT_DATE(), ?)',
             [fullName, email, 'Active']
         );
         const customerId = customerResult.insertId;
 
-        // 2. Insert new user with the linked customer_id and Email
+        
         await db.query(
             'INSERT INTO USERS (email, password, role, customer_id) VALUES (?, ?, ?, ?)',
             [email, password, 'user', customerId]
@@ -40,14 +40,14 @@ router.post('/login', async (req, res) => {
         
         const user = users[0];
         
-        // Fetch the Customer name for a better greeting
+        
         const [customers] = await db.query('SELECT NAME FROM CUSTOMER WHERE CUSTOMERID = ?', [user.customer_id]);
         const displayName = customers.length > 0 ? customers[0].NAME : email;
 
         res.json({ 
             message: 'Login successful', 
             email, 
-            username: displayName, // Keep 'username' key for frontend compatibility
+            username: displayName, 
             role: user.role || 'user',
             customer_id: user.customer_id 
         });
@@ -56,7 +56,7 @@ router.post('/login', async (req, res) => {
     }
 });
 
-// Public Tracking Endpoint
+
 router.get('/track/:id', async (req, res) => {
     try {
         const { id } = req.params;

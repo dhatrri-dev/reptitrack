@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// Get all receivers
+
 router.get('/', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT * FROM RECEIVER');
@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
 });
 
 
-// Auto-generated GET schema endpoint to retrieve column names (useful if table is empty)
+
 router.get('/schema/columns', async (req, res) => {
     try {
         const [columns] = await db.query('SHOW COLUMNS FROM RECEIVER');
@@ -23,7 +23,7 @@ router.get('/schema/columns', async (req, res) => {
     }
 });
 
-// Auto-generated POST endpoint to add a new record
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
@@ -44,13 +44,13 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Auto-generated DELETE endpoint
-// Note: Assumes the first column of the table is the primary key (e.g., CUSTOMERID, SHIPMENTID)
+
+
 router.delete('/:id', async (req, res) => {
     try {
         const id = req.params.id;
         
-        // Fetch column names to dynamically find the primary key
+        
         const [columns] = await db.query('SHOW COLUMNS FROM RECEIVER');
         const primaryKey = columns[0].Field;
 

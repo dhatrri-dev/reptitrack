@@ -65,7 +65,7 @@ export default function QuickTrack() {
 
                 {trackingData && (
                     <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '32px', marginTop: '16px' }}>
-                        {/* Summary Header */}
+                        {}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '32px' }}>
                             <div>
                                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '2px', fontWeight: '800' }}>Live Shipment Info</p>
@@ -83,7 +83,7 @@ export default function QuickTrack() {
                             </div>
                         </div>
 
-                        {/* Detail Grid */}
+                        {}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginBottom: '40px', background: 'var(--bg-body)', padding: '24px', borderRadius: '20px', border: '1px solid var(--border-color)' }}>
                             <div>
                                 <p style={{ margin: '0 0 12px', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase' }}>Route Visualization</p>

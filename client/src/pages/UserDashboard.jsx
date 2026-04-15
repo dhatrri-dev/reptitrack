@@ -9,9 +9,9 @@ export default function UserDashboard({ logout }) {
     return (
         <div style={{ minHeight: '80vh', background: 'var(--bg-body)', display: 'flex', flexDirection: 'column' }}>
 
-            {/* Main Content */}
+            {}
             <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 24px' }}>
-                {/* Welcome Header */}
+                {}
                 <div style={{ textAlign: 'center', marginBottom: '48px' }}>
                     <div style={{
                         width: '80px', height: '80px', background: 'linear-gradient(135deg, var(--accent-primary), #10b981)',

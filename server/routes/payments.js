@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// Get all payments joined with shipment and customer info
+
 router.get('/', async (req, res) => {
     try {
         const role = req.headers['x-user-role'];
@@ -11,14 +11,17 @@ router.get('/', async (req, res) => {
         let query = `
             SELECT 
                 p.*,
-                s.CURRENTSTATUS as SHIPMENT_STATUS,
-                s.BOOKINGDATE,
-                s.TOTALCOST as SHIPMENT_COST,
                 s.TOTALCOST as AMOUNT,
-                c.NAME as CUSTOMER_NAME
+                c.NAME as CUSTOMER_NAME,
+                cp.CITY as customer_city,
+                r.NAME as receiver_name,
+                rp.CITY as receiver_city
             FROM PAYMENT p
             LEFT JOIN SHIPMENT s ON p.SHIPMENTID = s.SHIPMENTID
             LEFT JOIN CUSTOMER c ON s.CUSTOMERID = c.CUSTOMERID
+            LEFT JOIN CUSTOMER_PINCODE cp ON c.PINCODE = cp.PINCODE
+            LEFT JOIN RECEIVER r ON s.RECEIVERID = r.RECEIVERID
+            LEFT JOIN RECEIVER_PINCODE rp ON r.PINCODE = rp.PINCODE
         `;
         
         const params = [];
@@ -36,7 +39,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Summary stats for payment dashboard cards
+
 router.get('/summary', async (req, res) => {
     try {
         const [[stats]] = await db.query(`
@@ -56,17 +59,19 @@ router.get('/summary', async (req, res) => {
 });
 
 
-// Auto-generated GET schema endpoint to retrieve column names (useful if table is empty)
+
 router.get('/schema/columns', async (req, res) => {
     try {
         const [columns] = await db.query('SHOW COLUMNS FROM PAYMENT');
-        res.json(columns.map(c => c.Field));
+        const fields = columns.map(c => c.Field);
+        
+        res.json([...fields, 'CUSTOMER_NAME', 'AMOUNT']);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-// Auto-generated POST endpoint to add a new record
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
@@ -87,13 +92,13 @@ router.post('/', async (req, res) => {
     }
 });
 
-// Auto-generated DELETE endpoint
-// Note: Assumes the first column of the table is the primary key (e.g., CUSTOMERID, SHIPMENTID)
+
+
 router.delete('/:id', async (req, res) => {
     try {
         const id = req.params.id;
         
-        // Fetch column names to dynamically find the primary key
+        
         const [columns] = await db.query('SHOW COLUMNS FROM PAYMENT');
         const primaryKey = columns[0].Field;
 
@@ -105,6 +110,47 @@ router.delete('/:id', async (req, res) => {
         }
         res.json({ message: 'Record deleted successfully' });
     } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
+
+router.put('/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = req.body;
+        console.log(`[PAYMENT UPDATE] ID: ${id}`, data);
+        
+        
+        const status = data.STATUS || data.PAYMENTSTATUS;
+        const method = data.METHOD || data.PAYMENTMETHOD;
+        const rawDate = data.DATE || data.PAYMENTDATE || new Date();
+        const date = new Date(rawDate).toISOString().split('T')[0];
+        const txnId = data.TRANSACTIONID;
+        const shipmentId = data.SHIPMENTID;
+        
+        let finalTxnId = txnId;
+        
+        
+        if (['Paid', 'Completed'].includes(status) && (!txnId || txnId === 'null' || txnId === '—')) {
+            finalTxnId = `TXN${shipmentId || id}${Date.now().toString().slice(-4)}`;
+        }
+
+        const query = `
+            UPDATE PAYMENT 
+            SET PAYMENTSTATUS = ?, PAYMENTMETHOD = ?, PAYMENTDATE = ?, TRANSACTIONID = ?
+            WHERE PAYMENTID = ?
+        `;
+        
+        const [result] = await db.query(query, [status, method, date, finalTxnId, id]);
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+        res.json({ message: 'Payment updated successfully', transactionId: finalTxnId });
+    } catch (err) {
+        console.error('[Update Payment Error]', err.message);
         res.status(500).json({ error: err.message });
     }
 });

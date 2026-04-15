@@ -19,7 +19,6 @@ import { motion } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
 
-// Fix Leaflet default icon issues in React
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
@@ -68,7 +67,7 @@ export default function TableView() {
     const [statusFilter, setStatusFilter] = useState('');
     const [customers, setCustomers] = useState([]);
     const [receivers, setReceivers] = useState([]);
-    // eslint-disable-next-line
+   
     const [serviceTypes, setServiceTypes] = useState([]);
     const [isAddingCustomer, setIsAddingCustomer] = useState(false);
     const [isAddingReceiver, setIsAddingReceiver] = useState(false);
@@ -77,10 +76,10 @@ export default function TableView() {
 
     const getStatusClass = (status) => {
         const s = status?.toLowerCase();
-        if (s?.includes('delivered')) return 'status-delivered';
+        if (s?.includes('delivered') || s?.includes('paid') || s?.includes('completed')) return 'status-delivered';
         if (s?.includes('transit')) return 'status-transit';
         if (s?.includes('pending')) return 'status-pending';
-        if (s?.includes('cancelled')) return 'status-cancelled';
+        if (s?.includes('cancelled') || s?.includes('failed') || s?.includes('overdue')) return 'status-cancelled';
         return '';
     };
 
@@ -90,6 +89,9 @@ export default function TableView() {
         if (table === 'shipments') {
             if (searchTerm) params.append('search', searchTerm);
             if (statusFilter) params.append('status', statusFilter);
+        }
+        if (table === 'tracking') {
+            params.append('latest', 'true');
         }
         if (params.toString()) url += `?${params.toString()}`;
         
@@ -133,13 +135,18 @@ export default function TableView() {
             message.success('Record deleted successfully');
             fetchData();
         } catch (err) {
-            message.error('Error deleting record');
+            message.error(err.response?.data?.error || 'Error deleting record');
         }
     };
 
     const handleStatusUpdate = async (id, newStatus) => {
         try {
-            await axios.patch(`${API}/shipments/${id}/status`, { status: newStatus });
+            if (table === 'payments') {
+                const record = data.find(r => r.PAYMENTID === id);
+                await axios.put(`${API}/payments/${id}`, { ...record, PAYMENTSTATUS: newStatus });
+            } else {
+                await axios.patch(`${API}/shipments/${id}/status`, { status: newStatus });
+            }
             message.success('Status updated');
             fetchData();
         } catch (err) {
@@ -154,7 +161,7 @@ export default function TableView() {
             setIsAddingCustomer(false);
             newCustomerForm.resetFields();
             
-            // Re-fetch customers and auto-select
+           
             const customersRes = await axios.get(`${API}/customers`);
             setCustomers(customersRes.data);
             setFormData(prev => ({ ...prev, CUSTOMERID: res.data.insertId }));
@@ -170,7 +177,7 @@ export default function TableView() {
             setIsAddingReceiver(false);
             newReceiverForm.resetFields();
             
-            // Re-fetch receivers and auto-select
+           
             const receiversRes = await axios.get(`${API}/receivers`);
             setReceivers(receiversRes.data);
             setFormData(prev => ({ ...prev, RECEIVERID: res.data.insertId }));
@@ -255,20 +262,22 @@ export default function TableView() {
                        <h1 style={{ color: 'var(--text-main)', margin: '0 0 4px', fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-1.5px' }}>
                           {table === 'shipments' ? 'Shipment Management' : table === 'customers' ? 'Customer Directory' : 'System Tracker'}
                        </h1>
-                       <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Management dashboard for logistics logistics</p>
+                       <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Management dashboard for logistics</p>
                     </div>
-                    <button onClick={() => { 
-                      setFormData({ 
-                        CURRENTSTATUS: 'Booked', 
-                        PRIORITY: 'Normal', 
-                        BOOKINGDATE: dayjs().format('YYYY-MM-DD'),
-                        TOTALCOST: 0 
-                      }); 
-                      setShowModal(true); 
-                    }} className="btn-primary">
-                      <Plus size={20} />
-                      Add New Record
-                    </button>
+                    {table === 'shipments' && (
+                        <button onClick={() => { 
+                          setFormData({ 
+                            CURRENTSTATUS: 'Booked', 
+                            PRIORITY: 'Normal', 
+                            BOOKINGDATE: dayjs().format('YYYY-MM-DD'),
+                            TOTALCOST: 0 
+                          }); 
+                          setShowModal(true); 
+                        }} className="btn-primary">
+                          <Plus size={20} />
+                          Add New Record
+                        </button>
+                    )}
                 </div>
 
                 <div style={{ display: 'flex', gap: '8px', marginBottom: '32px', background: 'rgba(0,0,0,0.03)', padding: '6px', borderRadius: '16px', width: 'fit-content' }}>
@@ -360,18 +369,18 @@ export default function TableView() {
                                                         <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}><MapPin size={10} style={{ marginRight: '4px' }}/>{row.receiver_city || "—"}</div>
                                                     </div>
                                                 </div>
-                                            ) : c === 'CURRENTSTATUS' ? (
+                                            ) : (c === 'CURRENTSTATUS' || c === 'PAYMENTSTATUS') ? (
                                                 <select
-                                                    value={row[c] || 'Booked'}
-                                                    onChange={(e) => handleStatusUpdate(row.SHIPMENTID, e.target.value)}
+                                                    value={row[c] || (c === 'PAYMENTSTATUS' ? 'Pending' : 'Booked')}
+                                                    onChange={(e) => handleStatusUpdate(row.SHIPMENTID || row.PAYMENTID, e.target.value)}
                                                     className={`status-badge ${getStatusClass(row[c])}`}
                                                     style={{ appearance: 'none', border: 'none', outline: 'none', cursor: 'pointer' }}
                                                 >
-                                                    {STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                    {(c === 'PAYMENTSTATUS' ? ['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'] : STATUS_OPTIONS).map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                                 </select>
-                                            ) : c === 'TOTALCOST' ? (
-                                                <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>₹{parseFloat(row[c]).toFixed(2)}</span>
-                                            ) : c === 'BOOKINGDATE' ? (
+                                            ) : (c === 'TOTALCOST' || c === 'AMOUNT') ? (
+                                                <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>₹{parseFloat(row[c] || 0).toFixed(2)}</span>
+                                            ) : (c === 'BOOKINGDATE' || c === 'PAYMENTDATE') ? (
                                                 <span style={{ color: 'var(--text-muted)' }}>{dayjs(row[c]).format('MMM DD, YYYY')}</span>
                                             ) : String(row[c] ?? '—')}
                                         </td>
@@ -401,7 +410,7 @@ export default function TableView() {
                   .btn-icon-sml.danger:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
                 `}</style>
 
-                {/* Modals Implementation */}
+                {}
                 {showModal && (
                     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                         <div className="card" style={{ width: '500px', padding: '32px', maxHeight: '90vh', overflowY: 'auto' }}>
@@ -515,8 +524,13 @@ export default function TableView() {
                       timelineData.length > 0 ? (
                         <Timeline mode="left" style={{ marginTop: '20px' }}>
                             {timelineData.map((item, idx) => (
-                                <Timeline.Item key={idx} color="green">
-                                    <div style={{ fontWeight: '700' }}>{item.status}</div>
+                                <Timeline.Item 
+                                  key={idx} 
+                                  color={item.status === 'Cancelled' ? 'red' : item.status === 'Delayed' ? 'orange' : 'green'}
+                                >
+                                    <div style={{ fontWeight: '700', color: item.status === 'Cancelled' ? '#ef4444' : item.status === 'Delayed' ? '#f59e0b' : 'inherit' }}>
+                                      {item.status}
+                                    </div>
                                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.location} • {dayjs(item.timestamp).format('MMM DD, HH:mm')}</div>
                                 </Timeline.Item>
                             ))}
@@ -565,7 +579,7 @@ export default function TableView() {
                                 </div>
                             </div>
                             <div style={{ borderTop: '2px solid var(--accent-primary)', paddingTop: '20px', textAlign: 'right' }}>
-                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Total: ${selectedShipment.TOTALCOST}</div>
+                                <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: 'var(--accent-primary)' }}>Total: ₹{selectedShipment.TOTALCOST}</div>
                             </div>
                             <div style={{ display: 'flex', gap: '12px', marginTop: '30px' }}>
                                 <button onClick={() => window.print()} className="btn-primary" style={{ flex: 1 }}>Print PDF</button>
@@ -577,9 +591,30 @@ export default function TableView() {
 
                 <Modal title="Edit Record" open={isEditModalVisible} onCancel={() => setIsEditModalVisible(false)} onOk={() => form.submit()} okText="Save Changes">
                     <Form form={form} layout="vertical" onFinish={handleEditSubmit}>
-                        <Form.Item name="CURRENTSTATUS" label="Status"><Select>{STATUS_OPTIONS.map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select></Form.Item>
-                        <Form.Item name="PRIORITY" label="Priority"><Select>{['Low', 'Normal', 'High', 'Urgent'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select></Form.Item>
-                        <Form.Item name="TOTALCOST" label="Total Cost"><Input type="number" step="0.01" prefix="₹" /></Form.Item>
+                        {table === 'payments' ? (
+                            <>
+                                <Form.Item name="PAYMENTSTATUS" label="Payment Status">
+                                    <Select>
+                                        {['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}
+                                    </Select>
+                                </Form.Item>
+                                <Form.Item name="PAYMENTMETHOD" label="Payment Method">
+                                    <Select>
+                                        {['UPI', 'Card', 'Cash', 'Not Set'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}
+                                    </Select>
+                                </Form.Item>
+                                <Form.Item name="TRANSACTIONID" label="Transaction ID">
+                                    <Input placeholder="e.g. TXN12345678" />
+                                </Form.Item>
+                                <Form.Item name="SHIPMENTID" label="Shipment ID" hidden><Input /></Form.Item>
+                            </>
+                        ) : (
+                            <>
+                                <Form.Item name="CURRENTSTATUS" label="Status"><Select>{STATUS_OPTIONS.map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select></Form.Item>
+                                <Form.Item name="PRIORITY" label="Priority"><Select>{['Low', 'Normal', 'High', 'Urgent'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select></Form.Item>
+                                <Form.Item name="TOTALCOST" label="Total Cost"><Input type="number" step="0.01" prefix="₹" /></Form.Item>
+                            </>
+                        )}
                     </Form>
                 </Modal>
             </motion.div>

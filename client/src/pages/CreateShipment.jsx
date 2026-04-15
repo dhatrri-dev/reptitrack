@@ -135,7 +135,7 @@ export default function CreateShipment() {
 
             <form onSubmit={handleSubmit}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '32px' }}>
-                    {/* Sender Details */}
+                    {}
                     <div className="card" style={{ padding: '32px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                             <div style={{ padding: '10px', background: 'rgba(34, 197, 94, 0.1)', borderRadius: '10px' }}>
@@ -189,7 +189,7 @@ export default function CreateShipment() {
                         </div>
                     </div>
 
-                    {/* Receiver Details */}
+                    {}
                     <div className="card" style={{ padding: '32px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                             <div style={{ padding: '10px', background: 'rgba(124, 58, 237, 0.1)', borderRadius: '10px' }}>
@@ -256,7 +256,7 @@ export default function CreateShipment() {
                     </div>
                 </div>
 
-                {/* Shipment Options */}
+                {}
                 <div className="card" style={{ padding: '32px', marginBottom: '32px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
                         <div style={{ padding: '10px', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '10px' }}>

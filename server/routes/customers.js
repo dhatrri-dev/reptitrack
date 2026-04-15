@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// Get all customers with City and State
+
 router.get('/', async (req, res) => {
     try {
         const query = `
@@ -20,7 +20,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Search customers by name or ID
+
 router.get('/search', async (req, res) => {
     console.log('[DEBUG] GET /api/customers/search hit with query:', req.query);
     try {
@@ -45,7 +45,7 @@ router.get('/search', async (req, res) => {
     }
 });
 
-// GET /api/customers/:id - Get a single customer with details
+
 router.get('/:id', async (req, res) => {
     console.log('[DEBUG] GET /api/customers/:id hit with id:', req.params.id);
     try {
@@ -68,7 +68,7 @@ router.get('/:id', async (req, res) => {
     }
 });
 
-// GET /api/customers/statuses - Fetch distinct status values
+
 router.get('/statuses', async (req, res) => {
     try {
         const [rows] = await db.query('SELECT DISTINCT STATUS FROM CUSTOMER WHERE STATUS IS NOT NULL AND STATUS != ""');
@@ -79,7 +79,7 @@ router.get('/statuses', async (req, res) => {
 });
 
 
-// Auto-generated GET schema endpoint to retrieve column names (useful if table is empty)
+
 router.get('/schema/columns', async (req, res) => {
     try {
         const [columns] = await db.query('SHOW COLUMNS FROM CUSTOMER');
@@ -89,7 +89,7 @@ router.get('/schema/columns', async (req, res) => {
     }
 });
 
-// Auto-generated POST endpoint to add a new record
+
 router.post('/', async (req, res) => {
     try {
         const data = req.body;
@@ -110,13 +110,13 @@ router.post('/', async (req, res) => {
     }
 });
 
-// PUT /api/customers/:id - Edit an existing customer
+
 router.put('/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { NAME, EMAIL, STATUS, STREET, PINCODE } = req.body;
         
-        // Use a parameterized update query specifically for the requested fields
+        
         const query = `
             UPDATE CUSTOMER 
             SET NAME = ?, EMAIL = ?, STATUS = ?, STREET = ?, PINCODE = ? 
@@ -135,13 +135,13 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// Auto-generated DELETE endpoint
-// Note: Assumes the first column of the table is the primary key (e.g., CUSTOMERID, SHIPMENTID)
+
+
 router.delete('/:id', async (req, res) => {
     try {
         const id = req.params.id;
         
-        // Fetch column names to dynamically find the primary key
+        
         const [columns] = await db.query('SHOW COLUMNS FROM CUSTOMER');
         const primaryKey = columns[0].Field;
 
@@ -157,7 +157,7 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
-// Get all shipments for a specific customer
+
 router.get('/:id/shipments', async (req, res) => {
     try {
         const { id } = req.params;

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// GET /api/reports?from=YYYY-MM-DD&to=YYYY-MM-DD&status=All
+
 router.get('/', async (req, res) => {
     try {
         const { from, to, status } = req.query;
@@ -32,7 +32,7 @@ router.get('/', async (req, res) => {
             ORDER BY s.BOOKINGDATE DESC
         `, params);
 
-        // Summary stats for this date range
+        
         const [[summary]] = await db.query(`
             SELECT
                 COUNT(*) as totalShipments,

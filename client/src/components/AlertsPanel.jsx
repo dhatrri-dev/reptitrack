@@ -36,7 +36,7 @@ export default function AlertsPanel() {
     };
 
     const delayed = alerts.filter(a => a.type === 'delayed');
-    const delivered = alerts.filter(a => a.type === 'delivered');
+    const cancelled = alerts.filter(a => a.type === 'cancelled');
 
     return (
         <div style={{ marginBottom: '32px' }}>
@@ -72,11 +72,11 @@ export default function AlertsPanel() {
                 />
             ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
-                    {/* Delayed Section */}
+                    {}
                     {delayed.length > 0 && (
                         <div className="card" style={{ padding: '20px', borderLeft: '4px solid #ef4444' }}>
                             <h4 style={{ color: '#ef4444', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <WarningOutlined /> Delayed or Overdue ({delayed.length})
+                                <WarningOutlined /> Delayed ({delayed.length})
                             </h4>
                             <List
                                 itemLayout="horizontal"
@@ -87,7 +87,7 @@ export default function AlertsPanel() {
                                         <List.Item.Meta
                                             avatar={<div style={{ width: '36px', height: '36px', background: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle color="#ef4444" size={20} /></div>}
                                             title={<span style={{ fontWeight: '700', color: 'var(--text-main)' }}>#{item.shipmentId}</span>}
-                                            description={<span style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>Expected: {formatDate(item.date)}</span>}
+                                            description={<span style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>Since: {formatDate(item.date)}</span>}
                                         />
                                     </List.Item>
                                 )}
@@ -95,22 +95,22 @@ export default function AlertsPanel() {
                         </div>
                     )}
 
-                    {/* Delivered Section */}
-                    {delivered.length > 0 && (
-                        <div className="card" style={{ padding: '20px', borderLeft: '4px solid #10b981' }}>
-                            <h4 style={{ color: '#10b981', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <CheckCircleOutlined /> Delivered Today ({delivered.length})
+                    {}
+                    {cancelled.length > 0 && (
+                        <div className="card" style={{ padding: '20px', borderLeft: '4px solid #ef4444' }}>
+                            <h4 style={{ color: '#ef4444', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <WarningOutlined /> Cancelled ({cancelled.length})
                             </h4>
                             <List
                                 itemLayout="horizontal"
-                                dataSource={delivered}
+                                dataSource={cancelled}
                                 style={{ maxHeight: '250px', overflowY: 'auto' }}
                                 renderItem={item => (
                                     <List.Item style={{ padding: '12px', background: 'var(--bg-body)', borderRadius: '12px', marginBottom: '8px' }}>
                                         <List.Item.Meta
-                                            avatar={<div style={{ width: '36px', height: '36px', background: 'rgba(16, 185, 129, 0.1)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle color="#10b981" size={20} /></div>}
+                                            avatar={<div style={{ width: '36px', height: '36px', background: '#fee2e2', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><AlertTriangle color="#ef4444" size={20} /></div>}
                                             title={<span style={{ fontWeight: '700', color: 'var(--text-main)' }}>#{item.shipmentId}</span>}
-                                            description={<span style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 'bold' }}>Delivered at: {formatDate(item.date)}</span>}
+                                            description={<span style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold' }}>Date: {formatDate(item.date)}</span>}
                                         />
                                     </List.Item>
                                 )}

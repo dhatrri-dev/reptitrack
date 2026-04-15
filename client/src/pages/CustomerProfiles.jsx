@@ -16,7 +16,7 @@ const getStatusColor = (status) => {
 };
 
 export default function CustomerProfiles() {
-    const [view, setView] = useState('all'); // 'all' or 'search'
+    const [view, setView] = useState('all');
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
     const [selected, setSelected] = useState(null);
@@ -80,7 +80,7 @@ export default function CustomerProfiles() {
 
     return (
         <div>
-            {/* Header */}
+            {}
             <div style={{ marginBottom: '32px' }}>
                 <h1 style={{ color: 'var(--text-main)', margin: '0 0 8px', fontSize: '2rem', fontWeight: '700', letterSpacing: '-1px' }}>
                     Customer <span style={{ color: 'var(--accent-primary)' }}>Profiles</span>
@@ -90,7 +90,7 @@ export default function CustomerProfiles() {
                 </p>
             </div>
 
-            {/* Contextual Tabs */}
+            {}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '32px' }}>
                 <button 
                     onClick={() => setView('all')}
@@ -166,7 +166,7 @@ export default function CustomerProfiles() {
                 </div>
             ) : (
                 <>
-            {/* Search Bar */}
+            {}
             <form onSubmit={handleSearch} style={{ position: 'relative', maxWidth: '600px', marginBottom: '32px' }}>
                 <div style={{ display: 'flex', gap: '12px' }}>
                     <div style={{ flex: 1, position: 'relative' }}>
@@ -192,7 +192,7 @@ export default function CustomerProfiles() {
                     </button>
                 </div>
 
-                {/* Dropdown Suggestions */}
+                {}
                 {results.length > 0 && (
                     <div style={{
                         position: 'absolute', top: '100%', left: 0, right: '120px',
@@ -240,10 +240,10 @@ export default function CustomerProfiles() {
                 )}
             </form>
 
-            {/* Selected Customer Profile */}
+            {}
             {selected && (
                 <div>
-                    {/* Customer Card */}
+                    {}
                     <div className="card" style={{ padding: '28px', marginBottom: '24px', display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
                         <div style={{
                             width: '72px', height: '72px', borderRadius: '24px',
@@ -268,7 +268,7 @@ export default function CustomerProfiles() {
                                 {selected.PINCODE && ` [${selected.PINCODE}]`}
                             </div>
                         </div>
-                        {/* Quick Stats */}
+                        {}
                         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
                             {[
                                 { label: 'Total Shipments', value: shipments.length, icon: <Package size={24} strokeWidth={2} />, color: '#8cc63f' },
@@ -296,7 +296,7 @@ export default function CustomerProfiles() {
                         </div>
                     </div>
 
-                    {/* Shipment History */}
+                    {}
                     <div className="card" style={{ padding: '24px' }}>
                         <h3 style={{ margin: '0 0 20px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', fontSize: '1.1rem', fontWeight: '700' }}>
                             <ClipboardList size={20} color="var(--accent-primary)" style={{ marginRight: '8px' }} /> Shipment History

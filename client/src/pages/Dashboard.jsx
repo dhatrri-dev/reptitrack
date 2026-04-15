@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { 
-  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+  LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
 import { 
   Package, 
@@ -82,10 +82,12 @@ export default function Dashboard() {
     const successData = chartData.successRateTrend || [];
 
     const barData = [
-        { name: 'Customers',  count: stats?.totalCustomers || 0 },
-        { name: 'Shipments',  count: stats?.totalShipments || 0 },
-        { name: 'In Transit', count: stats?.inTransit || 0 },
-        { name: 'Delivered',  count: stats?.delivered || 0 },
+        { name: 'Booked',           count: stats?.booked || 0,         color: '#f59e0b' },
+        { name: 'In Transit',       count: stats?.inTransit || 0,      color: '#3b82f6' },
+        { name: 'Out for Delivery', count: stats?.outForDelivery || 0, color: '#8b5cf6' },
+        { name: 'Delayed',         count: stats?.overdue || 0,         color: '#ef4444' },
+        { name: 'Delivered',       count: stats?.delivered || 0,      color: '#10b981' },
+        { name: 'Cancelled',       count: stats?.cancelled || 0,      color: '#6b7280' },
     ];
 
     const CustomTooltip = ({ active, payload, label }) => {
@@ -129,7 +131,7 @@ export default function Dashboard() {
 
     return (
         <motion.div initial="hidden" animate="visible" variants={containerVariants}>
-            {/* Header */}
+            {}
             <motion.div variants={itemVariants} style={{ marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent-primary)', marginBottom: '8px', fontWeight: '600', fontSize: '0.9rem' }}>
@@ -151,12 +153,12 @@ export default function Dashboard() {
                 )}
             </motion.div>
 
-            {/* ALERTS PANEL */}
+            {}
             <motion.div variants={itemVariants} style={{ marginBottom: '32px' }}>
               <AlertsPanel />
             </motion.div>
 
-            {/* Stat Cards */}
+            {}
             <motion.div 
                 variants={containerVariants}
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '24px', marginBottom: '40px' }}
@@ -188,7 +190,7 @@ export default function Dashboard() {
                 })}
             </motion.div>
 
-            {/* Charts Section */}
+            {}
             <motion.div 
                 variants={containerVariants}
                 style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(500px, 1fr))', gap: '24px' }}
@@ -253,7 +255,7 @@ export default function Dashboard() {
                 <motion.div variants={itemVariants} className="card" style={{ padding: '24px', height: '400px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}>
                       <div style={{ padding: '8px', background: 'var(--accent-primary-light)', borderRadius: '10px', color: 'var(--accent-primary)' }}><Package size={18} /></div>
-                      <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: '700' }}>Database Distribution</h3>
+                      <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: '700' }}>Status Distribution</h3>
                     </div>
                     <ResponsiveContainer width="100%" height="75%">
                         <BarChart data={barData}>
@@ -261,7 +263,11 @@ export default function Dashboard() {
                             <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} dy={10} />
                             <YAxis axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} dx={-10} />
                             <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(34, 197, 94, 0.05)' }} />
-                            <Bar dataKey="count" fill="var(--accent-primary)" radius={[4, 4, 0, 0]} barSize={40} />
+                            <Bar dataKey="count" radius={[6, 6, 0, 0]} barSize={40}>
+                                {barData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                            </Bar>
                         </BarChart>
                     </ResponsiveContainer>
                 </motion.div>

@@ -57,7 +57,7 @@ export default function Reports() {
 
     return (
         <>
-            {/* Print-only header (hidden on screen) */}
+            {}
             <style>{`
                 @media print {
                     .no-print { display: none !important; }
@@ -68,7 +68,7 @@ export default function Reports() {
                 .print-only { display: none; }
             `}</style>
 
-            {/* Print header visible only on paper */}
+            {}
             <div className="print-only" style={{ marginBottom: '24px', borderBottom: '2px solid #8cc63f', paddingBottom: '16px' }}>
                 <h1 style={{ margin: 0, color: '#8cc63f', fontSize: '2rem', fontWeight: '800' }}>ReptiTrack — Shipment Report</h1>
                 <p style={{ margin: '4px 0 0', color: '#555' }}>
@@ -76,7 +76,7 @@ export default function Reports() {
                 </p>
             </div>
 
-            {/* ── Screen UI ── */}
+            {}
             <div className="no-print">
                 <div style={{ marginBottom: '32px' }}>
                     <h1 style={{ color: 'var(--text-main)', margin: '0 0 8px', fontSize: '2rem', fontWeight: '700', letterSpacing: '-1px' }}>
@@ -87,7 +87,7 @@ export default function Reports() {
                     </p>
                 </div>
 
-                {/* Filter Bar */}
+                {}
                 <div className="card" style={{ padding: '24px', marginBottom: '24px', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'flex-end' }}>
                     <div style={{ flex: 1, minWidth: '140px' }}>
                         <label style={{ display: 'block', color: 'var(--text-muted)', fontWeight: '600', fontSize: '0.8rem', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>From Date</label>
@@ -124,10 +124,10 @@ export default function Reports() {
                 </div>
             </div>
 
-            {/* ── Report Output ── */}
+            {}
             {data && (
                 <div>
-                    {/* Print action (screen only) */}
+                    {}
                     <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                         <h2 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.3rem', fontWeight: '700' }}>
                             Report Results
@@ -147,7 +147,7 @@ export default function Reports() {
                         </button>
                     </div>
 
-                    {/* Summary Cards */}
+                    {}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px', marginBottom: '24px' }}>
                         {summaryCards.map(card => (
                             <div key={card.label} className="card stat-card" style={{ padding: '20px 16px', textAlign: 'center', transition: 'all 0.3s ease' }}>
@@ -166,7 +166,7 @@ export default function Reports() {
                         ))}
                     </div>
 
-                    {/* Shipments Table */}
+                    {}
                     <div className="card" style={{ padding: '24px', overflowX: 'auto' }}>
                         <h3 style={{ margin: '0 0 20px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', fontWeight: '700' }}>
                             <ClipboardList size={20} color="var(--accent-primary)" style={{ marginRight: '8px' }} /> Shipment Details

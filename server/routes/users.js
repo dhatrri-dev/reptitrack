@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/db');
 
-// GET /api/users - Get all users
+
 router.get('/', async (req, res) => {
     try {
         const [users] = await db.query('SELECT id, email AS username, role FROM USERS ORDER BY id ASC');
@@ -13,7 +13,7 @@ router.get('/', async (req, res) => {
     }
 });
 
-// PUT /api/users/:id/promote - Promote user to admin
+
 router.put('/:id/promote', async (req, res) => {
     try {
         const { id } = req.params;
@@ -29,7 +29,7 @@ router.put('/:id/promote', async (req, res) => {
     }
 });
 
-// DELETE /api/users/:id - Delete a user
+
 router.delete('/:id', async (req, res) => {
     try {
         const { id } = req.params;

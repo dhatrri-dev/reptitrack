@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
-import { CreditCard, DollarSign, CheckCircle, Clock, Search } from 'lucide-react';
+import { CreditCard, DollarSign, CheckCircle, Clock, Search, Edit2, X, Check, AlertCircle, Save } from 'lucide-react';
 
 const API = 'http://localhost:5000/api';
 
@@ -20,6 +20,11 @@ export default function PaymentTracker() {
     const [filter, setFilter] = useState('All');
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
+    
+   
+    const [editingPayment, setEditingPayment] = useState(null);
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [editValues, setEditValues] = useState({ PAYMENTSTATUS: '', PAYMENTMETHOD: '', TRANSACTIONID: '' });
 
     const fetchAll = useCallback(async () => {
         setLoading(true);
@@ -40,6 +45,33 @@ export default function PaymentTracker() {
     useEffect(() => {
         fetchAll();
     }, [fetchAll]);
+
+    const handleEditClick = (p) => {
+        setEditingPayment(p);
+        setEditValues({
+            PAYMENTSTATUS: p.PAYMENTSTATUS,
+            PAYMENTMETHOD: p.PAYMENTMETHOD || 'Not Set',
+            TRANSACTIONID: p.TRANSACTIONID || ''
+        });
+    };
+
+    const handleUpdate = async () => {
+        if (!editingPayment) return;
+        setIsUpdating(true);
+        try {
+            await axios.put(`${API}/payments/${editingPayment.PAYMENTID}`, {
+                ...editingPayment,
+                ...editValues
+            });
+            setEditingPayment(null);
+            fetchAll();
+        } catch (err) {
+            console.error('Update failed:', err);
+            alert('Update failed: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setIsUpdating(false);
+        }
+    };
 
     const filtered = payments.filter(p => {
         let matchesFilter = filter === 'All';
@@ -68,8 +100,8 @@ export default function PaymentTracker() {
     ] : [];
 
     return (
-        <div>
-            {/* Header */}
+        <div style={{ position: 'relative' }}>
+            {}
             <div style={{ marginBottom: '32px' }}>
                 <h1 style={{ color: 'var(--text-main)', margin: '0 0 8px', fontSize: '2rem', fontWeight: '700', letterSpacing: '-1px' }}>
                     Payment <span style={{ color: 'var(--accent-primary)' }}>Tracker</span>
@@ -79,7 +111,7 @@ export default function PaymentTracker() {
                 </p>
             </div>
 
-            {/* Summary Cards */}
+            {}
             {summary && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '32px' }}>
                     {statCards.map(card => (
@@ -110,7 +142,7 @@ export default function PaymentTracker() {
                 </div>
             )}
 
-            {/* Filters + Search */}
+            {}
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     {[
@@ -161,7 +193,7 @@ export default function PaymentTracker() {
                 </div>
             </div>
 
-            {/* Payment Table */}
+            {}
             <div className="card" style={{ padding: '24px', overflowX: 'auto' }}>
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-muted)' }}>Loading payments...</div>
@@ -176,7 +208,7 @@ export default function PaymentTracker() {
                     <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', whiteSpace: 'nowrap' }}>
                         <thead>
                             <tr>
-                                {['Payment ID', 'Shipment ID', 'Customer', 'Amount', 'Method', 'Date', 'Status'].map(h => (
+                                {['Payment ID', 'Shipment ID', 'Customer', 'Amount', 'Method', 'Date', 'Status', 'Actions'].map(h => (
                                     <th key={h} style={{ padding: '8px 16px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                                 ))}
                             </tr>
@@ -204,7 +236,7 @@ export default function PaymentTracker() {
                                         <td style={{ padding: '16px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', borderBottom: i === filtered.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
                                             {p.PAYMENTDATE ? new Date(p.PAYMENTDATE).toLocaleDateString() : '—'}
                                         </td>
-                                        <td style={{ padding: '16px', borderRadius: '0 12px 12px 0', borderTop: '1px solid var(--border-color)', borderBottom: i === filtered.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                                        <td style={{ padding: '16px', borderTop: '1px solid var(--border-color)', borderBottom: i === filtered.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
                                             <span style={{
                                                 display: 'inline-flex', alignItems: 'center', gap: '6px',
                                                 padding: '5px 14px', borderRadius: '99px',
@@ -215,6 +247,20 @@ export default function PaymentTracker() {
                                                 {st.label}
                                             </span>
                                         </td>
+                                        <td style={{ padding: '16px', borderRadius: '0 12px 12px 0', borderTop: '1px solid var(--border-color)', borderBottom: i === filtered.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
+                                            <button 
+                                                onClick={() => handleEditClick(p)}
+                                                style={{
+                                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                                    color: 'var(--text-muted)', padding: '6px', borderRadius: '8px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                                onMouseOver={(e) => e.currentTarget.style.color = 'var(--accent-primary)'}
+                                                onMouseOut={(e) => e.currentTarget.style.color = 'var(--text-muted)'}
+                                            >
+                                                <Edit2 size={18} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 );
                             })}
@@ -222,6 +268,88 @@ export default function PaymentTracker() {
                     </table>
                 )}
             </div>
+
+            {}
+            {editingPayment && (
+                <div style={{
+                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+                    backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    zIndex: 1000
+                }}>
+                    <div style={{
+                        width: '400px', background: 'var(--bg-card)', padding: '32px', borderRadius: '24px',
+                        boxShadow: 'var(--shadow-lg)', border: '1px solid var(--border-color)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+                            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '700' }}>Update Payment #{editingPayment.PAYMENTID}</h3>
+                            <button onClick={() => setEditingPayment(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>Payment Status</label>
+                                <select 
+                                    value={editValues.PAYMENTSTATUS}
+                                    onChange={(e) => setEditValues({...editValues, PAYMENTSTATUS: e.target.value})}
+                                    style={{
+                                        width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-body)',
+                                        border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '0.95rem',
+                                        outline: 'none'
+                                    }}
+                                >
+                                    {['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>Payment Method</label>
+                                <select 
+                                    value={editValues.PAYMENTMETHOD}
+                                    onChange={(e) => setEditValues({...editValues, PAYMENTMETHOD: e.target.value})}
+                                    style={{
+                                        width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-body)',
+                                        border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '0.95rem',
+                                        outline: 'none'
+                                    }}
+                                >
+                                    {['UPI', 'Card', 'Cash', 'Not Set'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)' }}>Transaction ID</label>
+                                <input 
+                                    type="text"
+                                    value={editValues.TRANSACTIONID}
+                                    onChange={(e) => setEditValues({...editValues, TRANSACTIONID: e.target.value})}
+                                    placeholder="Enter or generate ID"
+                                    style={{
+                                        width: '100%', padding: '12px', borderRadius: '12px', background: 'var(--bg-body)',
+                                        border: '1px solid var(--border-color)', color: 'var(--text-main)', fontSize: '0.95rem',
+                                        outline: 'none'
+                                    }}
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleUpdate}
+                                disabled={isUpdating}
+                                style={{
+                                    marginTop: '12px', width: '100%', padding: '14px', borderRadius: '12px',
+                                    background: 'var(--accent-primary)', color: 'white', border: 'none',
+                                    fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                                    justifyContent: 'center', gap: '8px', transition: 'all 0.2s',
+                                    opacity: isUpdating ? 0.7 : 1
+                                }}
+                            >
+                                {isUpdating ? 'Updating...' : <><Save size={18} /> Save Changes</>}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             
             <style>{`
                 .stat-card:hover .icon-wrapper {
