@@ -1,51 +1,88 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-import { Package } from 'lucide-react';
+import { supabase } from '../supabaseClient';
+import { Package, Eye, EyeOff } from 'lucide-react';
 
-export default function Login({ onLogin }) {
+export default function Login() {
     const [isRegistering, setIsRegistering] = useState(false);
+    const [isResettingPassword, setIsResettingPassword] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [termsAccepted, setTermsAccepted] = useState(false);
     const [email, setEmail] = useState('');
     const [fullName, setFullName] = useState('');
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState({ text: '', type: '' });
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setMessage({ text: '', type: '' });
+        
+        if (isRegistering && !termsAccepted) {
+            setMessage({ text: 'You must accept the Terms of Service to register.', type: 'error' });
+            return;
+        }
 
-        const endpoint = isRegistering ? 'http://localhost:5000/api/auth/register' : 'http://localhost:5000/api/auth/login';
-        const payload = isRegistering ? { email, password, fullName } : { email, password };
+        if (isRegistering && password !== confirmPassword) {
+            setMessage({ text: 'Passwords do not match.', type: 'error' });
+            return;
+        }
+
+        setLoading(true);
 
         try {
-            const res = await axios.post(endpoint, payload);
-            
-            if (isRegistering) {
+            if (isResettingPassword) {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin,
+                });
+                if (error) throw error;
+                setMessage({ text: 'Password reset link sent! Check your inbox.', type: 'success' });
+            } else if (isRegistering) {
+                const { error } = await supabase.auth.signUp({
+                    email,
+                    password,
+                    options: { data: { full_name: fullName } }
+                });
+                if (error) throw error;
                 setMessage({ text: 'Account created successfully! You can now log in.', type: 'success' });
                 setIsRegistering(false);
                 setPassword('');
             } else {
-                const role = res.data.role || 'user';
-                const customerId = res.data.customer_id;
-                localStorage.setItem('auth', 'true');
-                localStorage.setItem('role', role);
-                localStorage.setItem('username', res.data.username);
-                localStorage.setItem('email', res.data.email);
-                if (customerId) localStorage.setItem('customerId', customerId);
-                onLogin(role, customerId);
+                const { error } = await supabase.auth.signInWithPassword({ email, password });
+                if (error) throw error;
             }
         } catch (err) {
-            setMessage({ text: err.response?.data?.error || 'Server error occurred', type: 'error' });
+            setMessage({ text: err.message || 'Authentication error occurred', type: 'error' });
+        } finally {
+            setLoading(false);
         }
     };
 
+    const handleGoogleLogin = async () => {
+        try {
+            const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+            if (error) throw error;
+        } catch (err) {
+            setMessage({ text: err.message || 'Google Auth failed', type: 'error' });
+        }
+    };
+
+    const toggleMode = () => {
+        setIsRegistering(!isRegistering); 
+        setIsResettingPassword(false);
+        setConfirmPassword('');
+        setMessage({ text: '', type: '' }); 
+    };
+
+    const toggleResetMode = () => {
+        setIsResettingPassword(!isResettingPassword);
+        setIsRegistering(false);
+        setMessage({ text: '', type: '' });
+    };
 
     return (
         <div style={{
-            height: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '24px'
+            height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px'
         }}>
             <div className="card" style={{ width: '400px', maxWidth: '100%', padding: '48px 32px', textAlign: 'center', border: '4px solid var(--accent-primary-light)' }}>
                 <div style={{ width: '64px', height: '64px', background: 'var(--accent-primary)', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', boxShadow: '0 8px 16px rgba(140, 198, 63, 0.4)' }}>
@@ -55,7 +92,11 @@ export default function Login({ onLogin }) {
                     ReptiTrack<span style={{ color: 'var(--accent-primary)' }}>.</span>
                 </h1>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '32px' }}>
-                    {isRegistering ? "Create your new account to access the dashboard." : "Welcome back! Please login to your account."}
+                    {isResettingPassword 
+                        ? "Enter your email to reset your password." 
+                        : isRegistering 
+                            ? "Create your new account to access the dashboard." 
+                            : "Welcome back! Please login to your account."}
                 </p>
 
                 {message.text && (
@@ -69,67 +110,102 @@ export default function Login({ onLogin }) {
                 )}
 
                 <form onSubmit={handleSubmit} style={{ textAlign: 'left' }}>
-                    {isRegistering && (
+                    {isRegistering && !isResettingPassword && (
                         <div style={{ marginBottom: '20px' }}>
                             <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>Full Name</label>
                             <input 
-                                type="text" 
-                                required
-                                value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
-                                style={{ 
-                                    width: '100%', padding: '14px 16px', borderRadius: '14px', 
-                                    border: '2px solid var(--border-color)', outline: 'none',
-                                    fontFamily: 'Poppins, sans-serif', fontSize: '1rem',
-                                    background: 'transparent', color: 'var(--text-main)'
-                                }} 
+                                type="text" required value={fullName} onChange={(e) => setFullName(e.target.value)}
+                                style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'Poppins, sans-serif', fontSize: '1rem', background: 'transparent', color: 'var(--text-main)' }} 
                                 placeholder="Enter your full name"
                             />
                         </div>
                     )}
+                    
                     <div style={{ marginBottom: '20px' }}>
                         <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>Email Address</label>
                         <input 
-                            type="email" 
-                            required
-                            value={email}
-                            onChange={(e) => setEmail(e.target.value)}
-                            style={{ 
-                                width: '100%', padding: '14px 16px', borderRadius: '14px', 
-                                border: '2px solid var(--border-color)', outline: 'none',
-                                fontFamily: 'Poppins, sans-serif', fontSize: '1rem',
-                                background: 'transparent', color: 'var(--text-main)'
-                            }} 
+                            type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
+                            style={{ width: '100%', padding: '14px 16px', borderRadius: '14px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'Poppins, sans-serif', fontSize: '1rem', background: 'transparent', color: 'var(--text-main)' }} 
                             placeholder="e.g. name@company.com"
                         />
                     </div>
-                    <div style={{ marginBottom: '32px' }}>
-                        <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>Password</label>
-                        <input 
-                            type="password" 
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            style={{ 
-                                width: '100%', padding: '14px 16px', borderRadius: '14px', 
-                                border: '2px solid var(--border-color)', outline: 'none',
-                                fontFamily: 'Poppins, sans-serif', fontSize: '1rem',
-                                background: 'transparent', color: 'var(--text-main)'
-                            }} 
-                            placeholder="Enter your password"
-                        />
-                    </div>
-                    <button type="submit" className="btn-primary" style={{ width: '100%', padding: '16px', fontSize: '1.1rem', borderRadius: '16px', marginBottom: '16px' }}>
-                        {isRegistering ? "Register Account" : "Access Dashboard"}
+
+                    {!isResettingPassword && (
+                        <div style={{ marginBottom: '16px', position: 'relative' }}>
+                            <label style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>
+                                Password
+                                {!isRegistering && (
+                                    <span onClick={toggleResetMode} style={{ color: 'var(--accent-primary)', fontSize: '0.85rem', cursor: 'pointer', fontWeight: '500' }}>Forgot password?</span>
+                                )}
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <input 
+                                    type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)}
+                                    style={{ width: '100%', padding: '14px 44px 14px 16px', borderRadius: '14px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'Poppins, sans-serif', fontSize: '1rem', background: 'transparent', color: 'var(--text-main)' }} 
+                                    placeholder="Enter your password"
+                                />
+                                <div 
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    style={{ position: 'absolute', right: '14px', top: '14px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                >
+                                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {isRegistering && !isResettingPassword && (
+                        <div style={{ marginBottom: '16px', position: 'relative' }}>
+                            <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-main)', fontWeight: '600', fontSize: '0.9rem' }}>
+                                Verify Password
+                            </label>
+                            <div style={{ position: 'relative' }}>
+                                <input 
+                                    type={showPassword ? "text" : "password"} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                                    style={{ width: '100%', padding: '14px 44px 14px 16px', borderRadius: '14px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'Poppins, sans-serif', fontSize: '1rem', background: 'transparent', color: 'var(--text-main)' }} 
+                                    placeholder="Verify your password"
+                                />
+                            </div>
+                        </div>
+                    )}
+
+                    {isRegistering && !isResettingPassword && (
+                        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px', gap: '8px' }}>
+                            <input 
+                                type="checkbox" 
+                                id="terms"
+                                checked={termsAccepted}
+                                onChange={(e) => setTermsAccepted(e.target.checked)}
+                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            <label htmlFor="terms" style={{ fontSize: '0.85rem', color: 'var(--text-muted)', cursor: 'pointer', margin: 0 }}>
+                                I agree to the Terms of Service & Privacy Policy
+                            </label>
+                        </div>
+                    )}
+
+                    {!isRegistering && !isResettingPassword && (
+                        <div style={{ marginBottom: '24px' }}></div>
+                    )}
+
+                    <button type="submit" disabled={loading} className="btn-primary" style={{ width: '100%', padding: '16px', fontSize: '1.1rem', borderRadius: '16px', marginBottom: '16px', opacity: loading ? 0.7 : 1 }}>
+                        {loading ? "Please wait..." : isResettingPassword ? "Send Reset Link" : isRegistering ? "Register Account" : "Access Dashboard"}
                     </button>
+
+                    {!isResettingPassword && (
+                        <button type="button" onClick={handleGoogleLogin} style={{ width: '100%', padding: '14px', fontSize: '1rem', borderRadius: '16px', marginBottom: '24px', background: 'transparent', border: '2px solid var(--border-color)', color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', cursor: 'pointer', fontWeight: '600' }}>
+                            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" style={{ width: '20px', height: '20px' }} />
+                            Continue with Google
+                        </button>
+                    )}
                     
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '500' }}>
-                        {isRegistering ? "Already have an account?" : "Don't have an account?"} 
+                        {isResettingPassword ? "Remember your password?" : isRegistering ? "Already have an account?" : "Don't have an account?"} 
                         <span 
-                            onClick={() => { setIsRegistering(!isRegistering); setMessage({ text: '', type: '' }); }}
+                            onClick={isResettingPassword ? toggleResetMode : toggleMode}
                             style={{ color: 'var(--accent-primary)', marginLeft: '6px', cursor: 'pointer', fontWeight: '700' }}
                         >
-                            {isRegistering ? "Log in here" : "Sign up"}
+                            {isResettingPassword ? "Log in here" : isRegistering ? "Log in here" : "Sign up"}
                         </span>
                     </div>
                 </form>
