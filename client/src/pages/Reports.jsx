@@ -1,9 +1,6 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { Package, DollarSign, CheckCircle, Truck, Clock, AlertTriangle, Zap, Printer, Search, TrendingUp, ClipboardList } from 'lucide-react';
-
-
-const API = 'http://localhost:5000/api';
 
 const STATUS_OPTIONS = ['All', 'Booked', 'In Transit', 'Out for Delivery', 'Delivered', 'Delayed', 'Cancelled'];
 
@@ -31,12 +28,55 @@ export default function Reports() {
     const handleGenerate = async () => {
         setLoading(true);
         try {
-            const res = await axios.get(`${API}/reports`, {
-                params: { from, to, status }
+            let query = supabase
+                .from('shipment')
+                .select(`
+                    shipmentid,
+                    customerid,
+                    receiverid,
+                    bookingdate,
+                    currentstatus,
+                    totalcost,
+                    priority,
+                    customer:customerid ( name ),
+                    receiver:receiverid ( name )
+                `)
+                .gte('bookingdate', from)
+                .lte('bookingdate', to + 'T23:59:59')
+                .order('bookingdate', { ascending: false });
+
+            if (status !== 'All') query = query.eq('currentstatus', status);
+
+            const { data: shipments, error } = await query;
+            if (error) throw error;
+
+            const processed = (shipments || []).map(s => ({
+                ...s,
+                SHIPMENTID: s.shipmentid,
+                CUSTOMERID: s.customerid,
+                RECEIVERID: s.receiverid,
+                BOOKINGDATE: s.bookingdate,
+                CURRENTSTATUS: s.currentstatus,
+                TOTALCOST: s.totalcost,
+                PRIORITY: s.priority,
+                customer_name: s.customer?.name || '—',
+                receiver_name: s.receiver?.name || '—'
+            }));
+
+            // Compute summary
+            const totalShipments = processed.length;
+            const totalRevenue = processed.reduce((sum, s) => sum + (parseFloat(s.TOTALCOST) || 0), 0);
+            const delivered = processed.filter(s => s.CURRENTSTATUS === 'Delivered').length;
+            const inTransit = processed.filter(s => s.CURRENTSTATUS === 'In Transit').length;
+            const pending = processed.filter(s => s.CURRENTSTATUS === 'Booked').length;
+            const issues = processed.filter(s => s.CURRENTSTATUS === 'Delayed' || s.CURRENTSTATUS === 'Cancelled').length;
+
+            setData({
+                shipments: processed,
+                summary: { totalShipments, totalRevenue, delivered, inTransit, pending, issues }
             });
-            setData(res.data);
         } catch (err) {
-            alert('Failed to generate report: ' + (err.response?.data?.error || err.message));
+            alert('Failed to generate report: ' + err.message);
         } finally {
             setLoading(false);
         }
@@ -186,7 +226,7 @@ export default function Reports() {
                             <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px', whiteSpace: 'nowrap' }}>
                                 <thead>
                                     <tr>
-                                        {['ID', 'Customer', 'Receiver', 'Booking Date', 'Expected Delivery', 'Status', 'Cost'].map(h => (
+                                        {['ID', 'Customer', 'Receiver', 'Booking Date', 'Priority', 'Status', 'Cost'].map(h => (
                                             <th key={h} style={{ padding: '8px 14px', textAlign: 'left', color: 'var(--text-muted)', fontSize: '0.78rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{h}</th>
                                         ))}
                                     </tr>
@@ -198,7 +238,7 @@ export default function Reports() {
                                             <td style={{ padding: '14px', color: 'var(--text-main)', fontWeight: '600', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>{s.customer_name || `#${s.CUSTOMERID}`}</td>
                                             <td style={{ padding: '14px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>{s.receiver_name || `#${s.RECEIVERID}`}</td>
                                             <td style={{ padding: '14px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>{new Date(s.BOOKINGDATE).toLocaleDateString()}</td>
-                                            <td style={{ padding: '14px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>{new Date(s.EXPECTEDDELIVERYDATE).toLocaleDateString()}</td>
+                                            <td style={{ padding: '14px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>{s.PRIORITY || 'Normal'}</td>
                                             <td style={{ padding: '14px', borderTop: '1px solid var(--border-color)', borderBottom: i === data.shipments.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '4px 12px', borderRadius: '99px', background: `${getStatusColor(s.CURRENTSTATUS)}18`, color: getStatusColor(s.CURRENTSTATUS), fontWeight: '700', fontSize: '0.75rem', textTransform: 'uppercase' }}>
                                                     <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: getStatusColor(s.CURRENTSTATUS) }}></span>

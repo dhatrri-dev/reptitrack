@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Alert, Spin, List, Button } from 'antd';
-import { WarningOutlined, SyncOutlined, CheckCircleOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
-import axios from 'axios';
-
-const API = 'http://localhost:5000/api';
+import { WarningOutlined, SyncOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { AlertTriangle } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 export default function AlertsPanel() {
     const [alerts, setAlerts] = useState([]);
@@ -15,8 +13,21 @@ export default function AlertsPanel() {
         setLoading(true);
         setError(null);
         try {
-            const res = await axios.get(`${API}/alerts`);
-            setAlerts(Array.isArray(res.data) ? res.data : []);
+            const { data, error: queryErr } = await supabase
+                .from('shipment')
+                .select('shipmentid, currentstatus, bookingdate')
+                .in('currentstatus', ['Delayed', 'Cancelled'])
+                .order('bookingdate', { ascending: false });
+            
+            if (queryErr) throw queryErr;
+
+            const processedAlerts = (data || []).map(item => ({
+                shipmentId: item.shipmentid,
+                type: item.currentstatus.toLowerCase(),
+                date: item.bookingdate
+            }));
+
+            setAlerts(processedAlerts);
         } catch (err) {
             console.error('[Alerts Fetch Error]', err);
             setError('Failed to load alerts');
@@ -45,13 +56,7 @@ export default function AlertsPanel() {
                     <ThunderboltOutlined style={{ color: 'var(--accent-primary)' }} />
                     Live Shipment Alerts
                 </h3>
-                <Button 
-                    type="text" 
-                    icon={<SyncOutlined spin={loading} />} 
-                    onClick={fetchAlerts}
-                    title="Refresh Live Alerts"
-                    style={{ color: 'var(--text-muted)' }}
-                >
+                <Button type="text" icon={<SyncOutlined spin={loading} />} onClick={fetchAlerts} title="Refresh Live Alerts" style={{ color: 'var(--text-muted)' }}>
                     Refresh
                 </Button>
             </div>
@@ -63,25 +68,16 @@ export default function AlertsPanel() {
             ) : error ? (
                 <Alert message="Error" description={error} type="error" showIcon />
             ) : alerts.length === 0 ? (
-                <Alert 
-                    message="All Clear" 
-                    description="No urgent notifications at this time!" 
-                    type="success" 
-                    showIcon 
-                    style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', borderRadius: '16px' }}
-                />
+                <Alert message="All Clear" description="No urgent notifications at this time!" type="success" showIcon
+                    style={{ background: 'rgba(16, 185, 129, 0.1)', border: '1px solid #10b981', borderRadius: '16px' }} />
             ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '20px' }}>
-                    {}
                     {delayed.length > 0 && (
                         <div className="card" style={{ padding: '20px', borderLeft: '4px solid #ef4444' }}>
                             <h4 style={{ color: '#ef4444', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <WarningOutlined /> Delayed ({delayed.length})
                             </h4>
-                            <List
-                                itemLayout="horizontal"
-                                dataSource={delayed}
-                                style={{ maxHeight: '250px', overflowY: 'auto' }}
+                            <List itemLayout="horizontal" dataSource={delayed} style={{ maxHeight: '250px', overflowY: 'auto' }}
                                 renderItem={item => (
                                     <List.Item style={{ padding: '12px', background: 'var(--bg-body)', borderRadius: '12px', marginBottom: '8px' }}>
                                         <List.Item.Meta
@@ -94,17 +90,12 @@ export default function AlertsPanel() {
                             />
                         </div>
                     )}
-
-                    {}
                     {cancelled.length > 0 && (
                         <div className="card" style={{ padding: '20px', borderLeft: '4px solid #ef4444' }}>
                             <h4 style={{ color: '#ef4444', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <WarningOutlined /> Cancelled ({cancelled.length})
                             </h4>
-                            <List
-                                itemLayout="horizontal"
-                                dataSource={cancelled}
-                                style={{ maxHeight: '250px', overflowY: 'auto' }}
+                            <List itemLayout="horizontal" dataSource={cancelled} style={{ maxHeight: '250px', overflowY: 'auto' }}
                                 renderItem={item => (
                                     <List.Item style={{ padding: '12px', background: 'var(--bg-body)', borderRadius: '12px', marginBottom: '8px' }}>
                                         <List.Item.Meta

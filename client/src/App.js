@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import axios from 'axios';
+import { supabase } from './supabaseClient';
 import Navbar from './components/Navbar';
 import TableView from './pages/TableView';
 import Dashboard from './pages/Dashboard';
@@ -14,37 +14,70 @@ import MyShipments from './pages/MyShipments';
 import CreateShipment from './pages/CreateShipment';
 import TrackingPage from './pages/TrackingPage';
 
-// API Configuration: Inject role and customer ID headers for data isolation
-axios.interceptors.request.use(config => {
-  const role = localStorage.getItem('role');
-  const customerId = localStorage.getItem('customerId');
-  if (role) config.headers['x-user-role'] = role;
-  if (customerId) config.headers['x-customer-id'] = customerId;
-  return config;
-}, error => {
-  return Promise.reject(error);
-});
-
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(localStorage.getItem('auth') === 'true');
-  const [role, setRole] = useState(localStorage.getItem('role') || 'user');
+  const [session, setSession] = useState(null);
+  const [role, setRole] = useState('user');
+  const [loading, setLoading] = useState(true);
 
-  const handleLogin = (userRole) => {
-    setIsLoggedIn(true);
-    setRole(userRole || 'user');
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) {
+        fetchProfile(session.user.id);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      if (session) {
+        fetchProfile(session.user.id);
+      } else {
+        setRole('user');
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('role, customer_id')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      if (data) {
+        setRole(data.role || 'user');
+        localStorage.setItem('customerId', data.customer_id || '');
+        localStorage.setItem('role', data.role || 'user');
+      }
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('auth');
-    localStorage.removeItem('role');
-    localStorage.removeItem('username');
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('customerId');
-    setIsLoggedIn(false);
-    setRole('user');
+    localStorage.removeItem('role');
   };
 
-  if (!isLoggedIn) {
-    return <Login onLogin={handleLogin} />;
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: 'var(--bg-body)' }}>
+        <div style={{ fontSize: '1.2rem', color: 'var(--text-muted)' }}>Loading session...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
   }
 
   return (
@@ -63,6 +96,7 @@ function App() {
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/track" element={<TrackingPage />} />
                   <Route path="/admin/users" element={<UserManagement />} />
+                  <Route path="/create-shipment" element={<CreateShipment />} />
                 </>
               ) : (
                 <>

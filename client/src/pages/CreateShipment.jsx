@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, AlertCircle, User, MapPin, Shield } from 'lucide-react';
 
@@ -36,30 +36,37 @@ export default function CreateShipment() {
         const fetchSender = async () => {
             if (!customerId) return;
             try {
-                const res = await axios.get(`http://localhost:5000/api/customers/${customerId}`);
-                const data = res.data;
+                const { data, error } = await supabase
+                    .from('customer')
+                    .select('NAME, STREET, EMAIL, customer_pincode:PINCODE(CITY, STATE, PINCODE)')
+                    .eq('CUSTOMERID', customerId)
+                    .single();
+                if (error) throw error;
                 setSenderInfo(data);
-                setFormData(prev => ({ 
-                    ...prev, 
+                setFormData(prev => ({
+                    ...prev,
                     senderStreet: data.STREET || '',
-                    senderPincode: data.PINCODE || '',
-                    senderCity: data.CITY || '',
-                    senderState: data.STATE || ''
+                    senderPincode: data.customer_pincode?.PINCODE || '',
+                    senderCity: data.customer_pincode?.CITY || '',
+                    senderState: data.customer_pincode?.STATE || ''
                 }));
             } catch (err) {
-                console.error('Failed to fetch sender');
+                console.error('Failed to fetch sender', err.message);
             }
         };
 
         const fetchServices = async () => {
             try {
-                const res = await axios.get('http://localhost:5000/api/service_types');
-                if (res.data && res.data.length > 0) {
-                    setServiceTypes(res.data);
-                    setFormData(prev => ({ ...prev, serviceTypeId: res.data[0].SERVICETYPEID.toString() }));
+                const { data, error } = await supabase
+                    .from('service_type')
+                    .select('SERVICETYPEID, SERVICENAME, DELIVERYDAYS');
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    setServiceTypes(data);
+                    setFormData(prev => ({ ...prev, serviceTypeId: data[0].SERVICETYPEID.toString() }));
                 }
             } catch (err) {
-                console.error('Failed to fetch service types');
+                console.error('Failed to fetch service types', err.message);
             }
         };
 
@@ -78,35 +85,31 @@ export default function CreateShipment() {
         setError(null);
         setSuccess(null);
 
-        const payload = {
-            customerId,
-            sender: {
-                street: formData.senderStreet,
-                city: formData.senderCity,
-                state: formData.senderState,
-                pincode: formData.senderPincode
-            },
-            receiver: {
-                name: formData.receiverName,
-                email: formData.receiverEmail,
-                street: formData.receiverStreet,
-                city: formData.receiverCity,
-                state: formData.receiverState,
-                pincode: formData.receiverPincode
-            },
-            serviceTypeId: formData.serviceTypeId,
-            priority: formData.priority
-        };
-
         try {
-            const res = await axios.post('http://localhost:5000/api/shipments/create-with-receiver', payload);
-            setSuccess(`Shipment created successfully! ID: ${res.data.shipmentId}`);
-            
-            setTimeout(() => {
-                navigate('/my-shipments');
-            }, 2000);
+            // Use the atomic RPC function that handles everything in one transaction:
+            // Creates receiver, calculates cost, creates shipment, tracking entry, and payment record
+            const { data: shipmentId, error: rpcError } = await supabase.rpc('create_shipment_with_receiver', {
+                p_customer_id: parseInt(customerId),
+                p_sender_street: formData.senderStreet || null,
+                p_sender_pincode: formData.senderPincode ? parseInt(formData.senderPincode) : null,
+                p_sender_city: formData.senderCity || null,
+                p_sender_state: formData.senderState || null,
+                p_receiver_name: formData.receiverName,
+                p_receiver_email: formData.receiverEmail,
+                p_receiver_street: formData.receiverStreet || null,
+                p_receiver_pincode: formData.receiverPincode ? parseInt(formData.receiverPincode) : null,
+                p_receiver_city: formData.receiverCity || null,
+                p_receiver_state: formData.receiverState || null,
+                p_service_type_id: parseInt(formData.serviceTypeId),
+                p_priority: formData.priority
+            });
+
+            if (rpcError) throw rpcError;
+
+            setSuccess(`Shipment created successfully! ID: #${shipmentId}`);
+            setTimeout(() => navigate('/my-shipments'), 2000);
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to create shipment');
+            setError(err.message || 'Failed to create shipment');
         } finally {
             setLoading(false);
         }

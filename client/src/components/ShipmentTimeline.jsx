@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { ClipboardList, Truck, Zap, Package, CheckCircle, AlertCircle, Clock } from 'lucide-react';
 
 
@@ -44,8 +44,19 @@ export default function ShipmentTimeline({ shipmentId }) {
             if (!shipmentId) return;
             setLoading(true);
             try {
-                const res = await axios.get(`http://localhost:5000/api/shipments/${shipmentId}/timeline`);
-                setHistory(res.data || []);
+                const { data, error } = await supabase
+                    .from('tracking')
+                    .select('trackingid, status, location, timestamp, remarks')
+                    .eq('shipmentid', shipmentId)
+                    .order('timestamp', { ascending: true });
+                if (error) throw error;
+                // Normalize field names to what the component expects
+                setHistory((data || []).map(row => ({
+                    status: row.status,
+                    location: row.location,
+                    timestamp: row.timestamp,
+                    remarks: row.remarks
+                })));
             } catch (err) {
                 console.error('[Timeline Fetch Error]', err);
                 setError('Failed to load tracking history');

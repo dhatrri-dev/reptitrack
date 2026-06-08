@@ -1,0 +1,1 @@
+const db=require('./db/db'); async function run() { try { await db.query("INSERT INTO customer (CUSTOMERID, NAME, EMAIL, REGISTRATIONDATE, STATUS) VALUES (8, 'Harika', 'harika@gmail.com', '2026-03-31', 'Active')"); console.log('Harika restored'); process.exit(0); } catch(e) { console.error(e); process.exit(1); } } run();

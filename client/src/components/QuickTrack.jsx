@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { Search } from 'lucide-react';
 
 import ShipmentTimeline from './ShipmentTimeline';
@@ -17,11 +17,44 @@ export default function QuickTrack() {
         setError('');
         setTrackingData(null);
         try {
-            const res = await axios.get(`http://localhost:5000/api/auth/track/${trackingId}`);
-            console.log("Tracking API Response:", res.data);
-            setTrackingData(res.data);
+            const id = parseInt(trackingId.trim());
+            if (isNaN(id)) throw new Error('Please enter a valid numeric Shipment ID.');
+
+            const { data: shipment, error: shipErr } = await supabase
+                .from('shipment')
+                .select(`
+                    shipmentid,
+                    currentstatus,
+                    bookingdate,
+                    customer:customerid ( name, customer_pincode:pincode ( city ) ),
+                    receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                `)
+                .eq('shipmentid', id)
+                .single();
+
+            if (shipErr || !shipment) throw new Error('Shipment not found. Please check the ID.');
+
+            // Get latest tracking location
+            const { data: latestTracking } = await supabase
+                .from('tracking')
+                .select('location, timestamp')
+                .eq('shipmentid', id)
+                .order('timestamp', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            setTrackingData({
+                SHIPMENTID: shipment.shipmentid,
+                CURRENTSTATUS: shipment.currentstatus,
+                customer_name: shipment.customer?.name || 'Unknown',
+                customer_city: shipment.customer?.customer_pincode?.city || '—',
+                receiver_name: shipment.receiver?.name || 'Unknown',
+                receiver_city: shipment.receiver?.receiver_pincode?.city || '—',
+                LAST_LOCATION: latestTracking?.location || 'Processing...',
+                LAST_UPDATED: latestTracking?.timestamp || shipment.bookingdate
+            });
         } catch (err) {
-            setError(err.response?.data?.error || 'Shipment not found. Please check the ID.');
+            setError(err.message || 'Shipment not found. Please check the ID.');
         } finally {
             setTracking(false);
         }

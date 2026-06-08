@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, 
@@ -30,21 +30,72 @@ export default function MyShipments() {
             return;
         }
         try {
-            let url = `http://localhost:5000/api/shipments/customer/${customerId}`;
-            const params = new URLSearchParams();
-            if (searchTerm) params.append('search', searchTerm);
-            if (statusFilter) params.append('status', statusFilter);
-            if (params.toString()) url += `?${params.toString()}`;
+            let query = supabase
+                .from('shipment')
+                .select(`
+                    shipmentid,
+                    customerid,
+                    receiverid,
+                    currentstatus,
+                    totalcost,
+                    bookingdate,
+                    customer:customerid ( name, customer_pincode:pincode ( city ) ),
+                    receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                `)
+                .eq('customerid', customerId)
+                .order('bookingdate', { ascending: false });
 
-            const res = await axios.get(url);
-            setShipments(res.data);
+            if (statusFilter) query = query.eq('currentstatus', statusFilter);
+
+            const { data, error: queryErr } = await query;
+            if (queryErr) throw queryErr;
+
+            let processed = (data || []).map(s => ({
+                ...s,
+                SHIPMENTID: s.shipmentid,
+                CUSTOMERID: s.customerid,
+                RECEIVERID: s.receiverid,
+                CURRENTSTATUS: s.currentstatus,
+                TOTALCOST: s.totalcost,
+                BOOKINGDATE: s.bookingdate,
+                customer_name: s.customer?.name || '—',
+                customer_city: s.customer?.customer_pincode?.city || '—',
+                receiver_name: s.receiver?.name || '—',
+                receiver_city: s.receiver?.receiver_pincode?.city || '—',
+            }));
+
+            if (searchTerm) {
+                const q = searchTerm.toLowerCase();
+                processed = processed.filter(s =>
+                    String(s.SHIPMENTID).includes(q) ||
+                    s.customer_name.toLowerCase().includes(q) ||
+                    s.receiver_name.toLowerCase().includes(q)
+                );
+            }
+
+            setShipments(processed);
             setError(null);
         } catch (err) {
-            setError(err.response?.data?.error || "Failed to fetch shipments.");
+            setError(err.message || "Failed to fetch shipments.");
         } finally {
             setLoading(false);
         }
     }, [customerId, searchTerm, statusFilter]);
+
+    const handleDelete = async (id) => {
+        if (!window.confirm(`Are you sure you want to delete shipment #${id}?`)) return;
+        
+        try {
+            const { error: delErr } = await supabase
+                .from('shipment')
+                .delete()
+                .eq('shipmentid', id);
+            if (delErr) throw delErr;
+            setShipments(prev => prev.filter(s => s.SHIPMENTID !== id));
+        } catch (err) {
+            alert(err.message || "Failed to delete shipment.");
+        }
+    };
 
     useEffect(() => {
         fetchShipments();
@@ -57,17 +108,6 @@ export default function MyShipments() {
         if (s.includes('pending') || s.includes('booked')) return 'status-pending';
         if (s.includes('cancelled')) return 'status-cancelled';
         return '';
-    };
-
-    const handleDelete = async (id) => {
-        if (!window.confirm(`Are you sure you want to delete shipment #${id}?`)) return;
-        
-        try {
-            await axios.delete(`http://localhost:5000/api/shipments/${id}`);
-            setShipments(prev => prev.filter(s => s.SHIPMENTID !== id));
-        } catch (err) {
-            alert(err.response?.data?.error || "Failed to delete shipment.");
-        }
     };
 
     const containerVariants = {

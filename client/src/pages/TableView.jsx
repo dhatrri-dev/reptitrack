@@ -1,19 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
+import { supabase } from '../supabaseClient';
 import { Modal, Form, Input, Select, DatePicker, message, Timeline, Spin } from 'antd';
-import { 
-  Search, 
-  Filter, 
-  Plus, 
-  Map as MapIcon, 
-  History as HistoryIcon, 
-  Printer, 
-  Edit3, 
-  Trash2, 
-  MapPin, 
-  ArrowRight,
-  FileText
-} from 'lucide-react';
+import { Search, Filter, Plus, Map as MapIcon, History as HistoryIcon, Printer, Edit3, Trash2, MapPin, ArrowRight, FileText } from 'lucide-react';
 import dayjs from 'dayjs';
 import { motion } from 'framer-motion';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
@@ -27,18 +15,10 @@ L.Icon.Default.mergeOptions({
 });
 
 const CITY_COORDS = {
-    'Chennai': [13.0827, 80.2707],
-    'Bangalore': [12.9716, 77.5946],
-    'Hyderabad': [17.3850, 78.4867],
-    'Mumbai': [19.0760, 72.8777],
-    'Delhi': [28.6139, 77.2090],
-    'Pune': [18.5204, 73.8567],
-    'Kolkata': [22.5726, 88.3639],
-    'Ahmedabad': [23.0225, 72.5714],
-    'Jaipur': [26.9124, 75.7873],
+    'Chennai': [13.0827, 80.2707], 'Bangalore': [12.9716, 77.5946], 'Hyderabad': [17.3850, 78.4867],
+    'Mumbai': [19.0760, 72.8777], 'Delhi': [28.6139, 77.2090], 'Pune': [18.5204, 73.8567],
+    'Kolkata': [22.5726, 88.3639], 'Ahmedabad': [23.0225, 72.5714], 'Jaipur': [26.9124, 75.7873],
 };
-
-const API = 'http://localhost:5000/api';
 
 const TABLES = [
   { id: 'shipments', label: 'Shipments', icon: MapIcon },
@@ -59,6 +39,7 @@ export default function TableView() {
     const [loadingTimeline, setLoadingTimeline] = useState(false);
     const [showMap, setShowMap] = useState(false);
     const [mapData, setMapData] = useState(null);
+    // eslint-disable-next-line no-unused-vars
     const [loadingMap, setLoadingMap] = useState(false);
     const [showInvoice, setShowInvoice] = useState(false);
     const [selectedShipment, setSelectedShipment] = useState(null);
@@ -67,7 +48,7 @@ export default function TableView() {
     const [statusFilter, setStatusFilter] = useState('');
     const [customers, setCustomers] = useState([]);
     const [receivers, setReceivers] = useState([]);
-   
+    // eslint-disable-next-line no-unused-vars
     const [serviceTypes, setServiceTypes] = useState([]);
     const [isAddingCustomer, setIsAddingCustomer] = useState(false);
     const [isAddingReceiver, setIsAddingReceiver] = useState(false);
@@ -83,45 +64,175 @@ export default function TableView() {
         return '';
     };
 
-    const fetchData = useCallback(() => {
-        let url = `${API}/${table}`;
-        const params = new URLSearchParams();
-        if (table === 'shipments') {
-            if (searchTerm) params.append('search', searchTerm);
-            if (statusFilter) params.append('status', statusFilter);
+    const fetchData = useCallback(async () => {
+        try {
+            if (table === 'shipments') {
+                let query = supabase
+                    .from('shipment')
+                    .select(`
+                        shipmentid, bookingdate, currentstatus, priority, totalcost, customerid, receiverid,
+                        customer:customerid ( name, customer_pincode:pincode ( city ) ),
+                        receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                    `);
+                if (statusFilter) query = query.eq('currentstatus', statusFilter);
+                const { data: resData, error } = await query;
+                if (error) throw error;
+
+                let processed = resData.map(row => ({
+                    ...row,
+                    SHIPMENTID: row.shipmentid,
+                    BOOKINGDATE: row.bookingdate,
+                    CURRENTSTATUS: row.currentstatus,
+                    PRIORITY: row.priority,
+                    TOTALCOST: row.totalcost,
+                    customer_name: row.customer?.name || '—',
+                    customer_city: row.customer?.customer_pincode?.city || '—',
+                    receiver_name: row.receiver?.name || '—',
+                    receiver_city: row.receiver?.receiver_pincode?.city || '—'
+                }));
+
+                if (searchTerm) {
+                    const searchLower = searchTerm.toLowerCase();
+                    processed = processed.filter(row =>
+                        row.shipmentid.toString().includes(searchLower) ||
+                        row.customer_name.toLowerCase().includes(searchLower)
+                    );
+                }
+                setData(processed);
+            } else if (table === 'tracking') {
+                const { data: resData, error } = await supabase
+                    .from('tracking')
+                    .select(`
+                        trackingid, status, location, timestamp, shipmentid,
+                        shipment:shipmentid (
+                            totalcost, currentstatus,
+                            customer:customerid ( name, customer_pincode:pincode ( city ) ),
+                            receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                        )
+                    `)
+                    .order('timestamp', { ascending: false });
+                if (error) throw error;
+
+                const latestMap = new Map();
+                resData.forEach(row => { if (!latestMap.has(row.shipmentid)) latestMap.set(row.shipmentid, row); });
+                const processed = Array.from(latestMap.values()).map(row => ({
+                    ...row,
+                    TRACKINGID: row.trackingid,
+                    SHIPMENTID: row.shipmentid,
+                    STATUS: row.status,
+                    LOCATION: row.location,
+                    TIMESTAMP: row.timestamp,
+                    TOTALCOST: row.shipment?.totalcost || 0,
+                    shipment_status: row.shipment?.currentstatus || 'Booked',
+                    customer_name: row.shipment?.customer?.name || '—',
+                    customer_city: row.shipment?.customer?.customer_pincode?.city || '—',
+                    receiver_name: row.shipment?.receiver?.name || '—',
+                    receiver_city: row.shipment?.receiver?.receiver_pincode?.city || '—'
+                }));
+                setData(processed);
+            } else if (table === 'payments') {
+                const { data: resData, error } = await supabase
+                    .from('payment')
+                    .select(`
+                        paymentid, paymentdate, paymentmethod, paymentstatus, transactionid, shipmentid,
+                        shipment:shipmentid (
+                            totalcost,
+                            customer:customerid ( name, customer_pincode:pincode ( city ) ),
+                            receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                        )
+                    `)
+                    .order('paymentid', { ascending: false });
+                if (error) throw error;
+
+                const processed = resData.map(row => ({
+                    ...row,
+                    PAYMENTID: row.paymentid,
+                    SHIPMENTID: row.shipmentid,
+                    PAYMENTDATE: row.paymentdate,
+                    PAYMENTMETHOD: row.paymentmethod,
+                    PAYMENTSTATUS: row.paymentstatus,
+                    TRANSACTIONID: row.transactionid,
+                    CUSTOMER_NAME: row.shipment?.customer?.name || '—',
+                    AMOUNT: row.shipment?.totalcost || 0,
+                    customer_city: row.shipment?.customer?.customer_pincode?.city || '—',
+                    receiver_name: row.shipment?.receiver?.name || '—',
+                    receiver_city: row.shipment?.receiver?.receiver_pincode?.city || '—'
+                }));
+                setData(processed);
+            }
+        } catch (err) {
+            console.error('Error fetching table data:', err);
+            message.error('Failed to load table records.');
         }
-        if (table === 'tracking') {
-            params.append('latest', 'true');
-        }
-        if (params.toString()) url += `?${params.toString()}`;
-        
-        axios.get(url).then(r => setData(r.data)).catch(err => console.error(err));
     }, [table, searchTerm, statusFilter]);
 
     useEffect(() => {
         fetchData();
-        axios.get(`${API}/${table}/schema/columns`).then(r => setSchema(r.data)).catch(err => console.error(err));
-        
         if (table === 'shipments') {
-            axios.get(`${API}/customers`).then(r => setCustomers(r.data)).catch(err => console.error(err));
-            axios.get(`${API}/receivers`).then(r => setReceivers(r.data)).catch(err => console.error(err));
-            axios.get(`${API}/service_types`).then(r => setServiceTypes(r.data)).catch(err => console.error(err));
+            setSchema(['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']);
+            supabase.from('customer').select('customerid, name, customer_pincode:pincode(city)')
+                .then(({ data }) => setCustomers((data || []).map(c => ({ CUSTOMERID: c.customerid, NAME: c.name, CITY: c.customer_pincode?.city }))))
+                .catch(err => console.error(err));
+            supabase.from('receiver').select('receiverid, name, receiver_pincode:pincode(city)')
+                .then(({ data }) => setReceivers((data || []).map(r => ({ RECEIVERID: r.receiverid, NAME: r.name, CITY: r.receiver_pincode?.city }))))
+                .catch(err => console.error(err));
+            supabase.from('service_type').select('servicetypeid, servicename')
+                .then(({ data }) => setServiceTypes(data || []))
+                .catch(err => console.error(err));
+        } else if (table === 'tracking') {
+            setSchema(['TRACKINGID', 'STATUS', 'LOCATION', 'TIMESTAMP', 'SHIPMENTID']);
+        } else if (table === 'payments') {
+            setSchema(['PAYMENTID', 'PAYMENTDATE', 'PAYMENTMETHOD', 'PAYMENTSTATUS', 'TRANSACTIONID', 'SHIPMENTID', 'CUSTOMER_NAME', 'AMOUNT']);
         }
-    }, [table, statusFilter, fetchData]);
+    }, [table, fetchData]);
 
-    const handleInputChange = (e) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
-    };
+    const handleInputChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
 
     const handleAddRecord = async (e) => {
         e.preventDefault();
         try {
-            await axios.post(`${API}/${table}`, formData);
+            if (table === 'shipments') {
+                const { data: newShipment, error: shipErr } = await supabase
+                    .from('shipment')
+                    .insert({
+                        customerid: formData.CUSTOMERID,
+                        receiverid: formData.RECEIVERID,
+                        currentstatus: formData.CURRENTSTATUS || 'Booked',
+                        priority: formData.PRIORITY || 'Normal',
+                        totalcost: parseFloat(formData.TOTALCOST) || 0,
+                        bookingdate: formData.BOOKINGDATE || new Date().toISOString()
+                    })
+                    .select().single();
+                if (shipErr) throw shipErr;
+
+                const { data: custData } = await supabase
+                    .from('customer').select('customer_pincode:pincode ( city )').eq('customerid', formData.CUSTOMERID).single();
+                const city = custData?.customer_pincode?.city || 'Origin';
+
+                await supabase.from('tracking').insert({
+                    shipmentid: newShipment.shipmentid,
+                    status: newShipment.currentstatus,
+                    location: `${city} Warehouse`,
+                    timestamp: newShipment.bookingdate
+                });
+                await supabase.from('payment').insert({
+                    shipmentid: newShipment.shipmentid,
+                    paymentstatus: 'Pending',
+                    paymentdate: newShipment.bookingdate.split('T')[0],
+                    paymentmethod: 'Not Set',
+                    transactionid: `TXN${newShipment.shipmentid}${Date.now().toString().slice(-4)}`
+                });
+            } else {
+                const insertTable = table === 'payments' ? 'payment' : 'tracking';
+                const { error } = await supabase.from(insertTable).insert(formData);
+                if (error) throw error;
+            }
             setShowModal(false);
             setFormData({});
             message.success('Record added successfully');
             fetchData();
         } catch (err) {
+            console.error('Error adding record:', err);
             message.error('Error adding record');
         }
     };
@@ -129,13 +240,16 @@ export default function TableView() {
     const handleDeleteRecord = async (row) => {
         if (!window.confirm("Are you sure you want to delete this record?")) return;
         try {
-            const primaryKey = schema[0];
-            const id = row[primaryKey];
-            await axios.delete(`${API}/${table}/${id}`);
+            const deleteTable = table === 'shipments' ? 'shipment' : table === 'payments' ? 'payment' : 'tracking';
+            const pkField = table === 'shipments' ? 'shipmentid' : table === 'payments' ? 'paymentid' : 'trackingid';
+            const id = row.SHIPMENTID || row.PAYMENTID || row.TRACKINGID;
+            const { error } = await supabase.from(deleteTable).delete().eq(pkField, id);
+            if (error) throw error;
             message.success('Record deleted successfully');
             fetchData();
         } catch (err) {
-            message.error(err.response?.data?.error || 'Error deleting record');
+            console.error('Error deleting record:', err);
+            message.error(err.message || 'Error deleting record');
         }
     };
 
@@ -143,45 +257,62 @@ export default function TableView() {
         try {
             if (table === 'payments') {
                 const record = data.find(r => r.PAYMENTID === id);
-                await axios.put(`${API}/payments/${id}`, { ...record, PAYMENTSTATUS: newStatus });
+                let txnId = record?.TRANSACTIONID;
+                if (['Paid', 'Completed'].includes(newStatus) && (!txnId || txnId === 'null' || txnId === '—' || txnId === 'Not Set')) {
+                    txnId = `TXN${record?.SHIPMENTID || id}${Date.now().toString().slice(-4)}`;
+                }
+                const { error } = await supabase.from('payment').update({ paymentstatus: newStatus, transactionid: txnId }).eq('paymentid', id);
+                if (error) throw error;
             } else {
-                await axios.patch(`${API}/shipments/${id}/status`, { status: newStatus });
+                const { error: shipErr } = await supabase.from('shipment').update({ currentstatus: newStatus }).eq('shipmentid', id);
+                if (shipErr) throw shipErr;
+                const record = data.find(r => r.SHIPMENTID === id);
+                const city = record?.receiver_city || 'Destination';
+                const location = (newStatus === 'Delivered' || newStatus === 'Out for Delivery') ? city : 'Operational Hub';
+                await supabase.from('tracking').insert({ shipmentid: id, status: newStatus, location, timestamp: new Date().toISOString() });
             }
-            message.success('Status updated');
+            message.success('Status updated successfully');
             fetchData();
         } catch (err) {
+            console.error('Error updating status:', err);
             message.error('Error updating status');
         }
     };
 
     const handleSaveNewCustomer = async (values) => {
         try {
-            const res = await axios.post(`${API}/customers`, { ...values, STATUS: 'Active' });
+            const { data: newCust, error } = await supabase
+                .from('customer')
+                .insert({ name: values.NAME, email: values.EMAIL, street: values.STREET, pincode: values.PINCODE, status: 'Active', registrationdate: new Date().toISOString().split('T')[0] })
+                .select().single();
+            if (error) throw error;
             message.success('Customer created successfully');
             setIsAddingCustomer(false);
             newCustomerForm.resetFields();
-            
-           
-            const customersRes = await axios.get(`${API}/customers`);
-            setCustomers(customersRes.data);
-            setFormData(prev => ({ ...prev, CUSTOMERID: res.data.insertId }));
+            const { data: allCusts } = await supabase.from('customer').select('customerid, name, customer_pincode:pincode(city)');
+            setCustomers((allCusts || []).map(c => ({ CUSTOMERID: c.customerid, NAME: c.name, CITY: c.customer_pincode?.city })));
+            setFormData(prev => ({ ...prev, CUSTOMERID: newCust.customerid }));
         } catch (err) {
+            console.error('Error creating customer:', err);
             message.error('Failed to create customer');
         }
     };
 
     const handleSaveNewReceiver = async (values) => {
         try {
-            const res = await axios.post(`${API}/receivers`, values);
+            const { data: newRec, error } = await supabase
+                .from('receiver')
+                .insert({ name: values.NAME, email: values.EMAIL, street: values.STREET, pincode: values.PINCODE })
+                .select().single();
+            if (error) throw error;
             message.success('Receiver created successfully');
             setIsAddingReceiver(false);
             newReceiverForm.resetFields();
-            
-           
-            const receiversRes = await axios.get(`${API}/receivers`);
-            setReceivers(receiversRes.data);
-            setFormData(prev => ({ ...prev, RECEIVERID: res.data.insertId }));
+            const { data: allRecs } = await supabase.from('receiver').select('receiverid, name, receiver_pincode:pincode(city)');
+            setReceivers((allRecs || []).map(r => ({ RECEIVERID: r.receiverid, NAME: r.name, CITY: r.receiver_pincode?.city })));
+            setFormData(prev => ({ ...prev, RECEIVERID: newRec.receiverid }));
         } catch (err) {
+            console.error('Error creating receiver:', err);
             message.error('Failed to create receiver');
         }
     };
@@ -191,9 +322,15 @@ export default function TableView() {
         setShowTimeline(true);
         setLoadingTimeline(true);
         try {
-            const res = await axios.get(`${API}/shipments/${shipment.SHIPMENTID}/timeline`);
-            setTimelineData(res.data);
+            const { data, error } = await supabase
+                .from('tracking')
+                .select('status, location, timestamp')
+                .eq('shipmentid', shipment.SHIPMENTID)
+                .order('timestamp', { ascending: true });
+            if (error) throw error;
+            setTimelineData(data.map(item => ({ status: item.status, location: item.location, timestamp: item.timestamp })));
         } catch (err) {
+            console.error('Timeline error:', err);
             message.error('Failed to load tracking data');
         } finally {
             setLoadingTimeline(false);
@@ -205,77 +342,74 @@ export default function TableView() {
         setShowMap(true);
         setLoadingMap(true);
         try {
-            setMapData({
-                sender_city: shipment.customer_city || 'Chennai',
-                receiver_city: shipment.receiver_city || 'Bangalore',
-                current_location: shipment.customer_city || 'Chennai'
-            });
-        } catch (err) {
-            message.error('Failed to load map data');
-        } finally {
-            setLoadingMap(false);
-        }
+            setMapData({ sender_city: shipment.customer_city || 'Chennai', receiver_city: shipment.receiver_city || 'Bangalore', current_location: shipment.customer_city || 'Chennai' });
+        } catch (err) { message.error('Failed to load map data'); }
+        finally { setLoadingMap(false); }
     };
 
     const handleEditClick = (record) => {
         setEditingRecord(record);
         let initialValues = { ...record };
+        if (record.BOOKINGDATE) initialValues.BOOKINGDATE = dayjs(record.BOOKINGDATE);
+        if (record.PAYMENTDATE) initialValues.PAYMENTDATE = dayjs(record.PAYMENTDATE);
         form.setFieldsValue(initialValues);
         setIsEditModalVisible(true);
     };
 
     const handleEditSubmit = async (values) => {
         try {
-            const primaryKey = schema[0];
-            const id = editingRecord[primaryKey];
-            await axios.put(`${API}/${table}/${id}`, values);
+            const updateTable = table === 'shipments' ? 'shipment' : table === 'payments' ? 'payment' : 'tracking';
+            const pkField = table === 'shipments' ? 'shipmentid' : table === 'payments' ? 'paymentid' : 'trackingid';
+            const id = editingRecord.SHIPMENTID || editingRecord.PAYMENTID || editingRecord.TRACKINGID;
+
+            let payload = {};
+            if (table === 'payments') {
+                payload = {
+                    paymentstatus: values.PAYMENTSTATUS,
+                    paymentmethod: values.PAYMENTMETHOD,
+                    transactionid: values.TRANSACTIONID
+                };
+                if (values.PAYMENTDATE) payload.paymentdate = values.PAYMENTDATE.format('YYYY-MM-DD');
+                if (['Paid', 'Completed'].includes(values.PAYMENTSTATUS) && (!payload.transactionid || payload.transactionid === 'Not Set')) {
+                    payload.transactionid = `TXN${editingRecord.SHIPMENTID || id}${Date.now().toString().slice(-4)}`;
+                }
+            } else {
+                payload = { currentstatus: values.CURRENTSTATUS, priority: values.PRIORITY, totalcost: values.TOTALCOST };
+                if (values.BOOKINGDATE) payload.bookingdate = values.BOOKINGDATE.toISOString();
+            }
+
+            const { error } = await supabase.from(updateTable).update(payload).eq(pkField, id);
+            if (error) throw error;
             message.success('Updated successfully');
             setIsEditModalVisible(false);
             fetchData();
         } catch (err) {
+            console.error('Update record error:', err);
             message.error('Failed to update record');
         }
     };
 
-    let columns = schema.length > 0 ? schema : (data.length ? Object.keys(data[0]) : []);
-    if (table === 'shipments') {
-        columns = ['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE'];
-    }
+    const columns = table === 'shipments'
+        ? ['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']
+        : schema;
 
     const STATUS_OPTIONS = ['Booked', 'In Transit', 'Out for Delivery', 'Delivered', 'Delayed', 'Cancelled'];
-
-    const containerVariants = {
-      hidden: { opacity: 0 },
-      visible: { opacity: 1, transition: { staggerChildren: 0.05 } }
-    };
-
-    const itemVariants = {
-      hidden: { opacity: 0, y: 10 },
-      visible: { opacity: 1, y: 0 }
-    };
+    const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.05 } } };
+    const itemVariants = { hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } };
 
     return (
         <>
             <motion.div initial="hidden" animate="visible" variants={containerVariants}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
                     <div>
-                       <h1 style={{ color: 'var(--text-main)', margin: '0 0 4px', fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-1.5px' }}>
-                          {table === 'shipments' ? 'Shipment Management' : table === 'customers' ? 'Customer Directory' : 'System Tracker'}
-                       </h1>
-                       <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Management dashboard for logistics</p>
+                        <h1 style={{ color: 'var(--text-main)', margin: '0 0 4px', fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-1.5px' }}>
+                            {table === 'shipments' ? 'Shipment Management' : table === 'tracking' ? 'Tracking Overview' : 'Payment Records'}
+                        </h1>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>Management dashboard for logistics</p>
                     </div>
                     {table === 'shipments' && (
-                        <button onClick={() => { 
-                          setFormData({ 
-                            CURRENTSTATUS: 'Booked', 
-                            PRIORITY: 'Normal', 
-                            BOOKINGDATE: dayjs().format('YYYY-MM-DD'),
-                            TOTALCOST: 0 
-                          }); 
-                          setShowModal(true); 
-                        }} className="btn-primary">
-                          <Plus size={20} />
-                          Add New Record
+                        <button onClick={() => { setFormData({ CURRENTSTATUS: 'Booked', PRIORITY: 'Normal', BOOKINGDATE: dayjs().format('YYYY-MM-DD'), TOTALCOST: 0 }); setShowModal(true); }} className="btn-primary">
+                            <Plus size={20} /> Add New Record
                         </button>
                     )}
                 </div>
@@ -285,16 +419,8 @@ export default function TableView() {
                         const Icon = t.icon;
                         return (
                             <button key={t.id} onClick={() => { setTable(t.id); setSearchTerm(''); setStatusFilter(''); }}
-                                style={{
-                                    padding: '10px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer',
-                                    background: table === t.id ? 'var(--bg-card)' : 'transparent',
-                                    color: table === t.id ? 'var(--accent-primary)' : 'var(--text-muted)',
-                                    fontWeight: '600', transition: 'all 0.2s', fontSize: '0.9rem',
-                                    boxShadow: table === t.id ? 'var(--shadow-sm)' : 'none',
-                                    display: 'flex', alignItems: 'center', gap: '8px'
-                                }}>
-                                <Icon size={16} />
-                                {t.label}
+                                style={{ padding: '10px 20px', borderRadius: '12px', border: 'none', cursor: 'pointer', background: table === t.id ? 'var(--bg-card)' : 'transparent', color: table === t.id ? 'var(--accent-primary)' : 'var(--text-muted)', fontWeight: '600', transition: 'all 0.2s', fontSize: '0.9rem', boxShadow: table === t.id ? 'var(--shadow-sm)' : 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Icon size={16} />{t.label}
                             </button>
                         );
                     })}
@@ -304,33 +430,15 @@ export default function TableView() {
                     <div className="glass" style={{ display: 'flex', gap: '16px', marginBottom: '32px', alignItems: 'center', padding: '16px', borderRadius: '20px' }}>
                         <div style={{ flex: 1, position: 'relative' }}>
                             <Search size={18} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                            <input 
-                                type="text" 
-                                placeholder="Search by ID or Sender..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && fetchData()}
-                                style={{ 
-                                    width: '100%', padding: '12px 16px 12px 48px', borderRadius: '12px', 
-                                    background: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border-color)',
-                                    fontSize: '0.9rem', outline: 'none'
-                                }}
-                            />
+                            <input type="text" placeholder="Search by ID or Sender..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && fetchData()}
+                                style={{ width: '100%', padding: '12px 16px 12px 48px', borderRadius: '12px', background: 'var(--bg-card)', color: 'var(--text-main)', border: '1px solid var(--border-color)', fontSize: '0.9rem', outline: 'none' }} />
                         </div>
-                        
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: '200px' }}>
                             <Filter size={18} style={{ color: 'var(--text-muted)' }} />
-                            <Select 
-                                placeholder="Status Filter"
-                                value={statusFilter || undefined}
-                                onChange={(val) => setStatusFilter(val)}
-                                allowClear
-                                style={{ width: '100%' }}
-                            >
+                            <Select placeholder="Status Filter" value={statusFilter || undefined} onChange={(val) => setStatusFilter(val)} allowClear style={{ width: '100%' }}>
                                 {STATUS_OPTIONS.map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}
                             </Select>
                         </div>
-
                         <button className="btn-primary" onClick={fetchData} style={{ padding: '10px 24px' }}>Search</button>
                     </div>
                 )}
@@ -350,7 +458,7 @@ export default function TableView() {
                         <tbody>
                             {data.map((row, i) => (
                                 <motion.tr key={i} variants={itemVariants} className="table-row-hover" style={{ borderBottom: '1px solid var(--border-color)' }}>
-                                    {columns.map((c, idx) => (
+                                    {columns.map((c) => (
                                         <td key={c} style={{ padding: '16px 24px', fontSize: '0.9rem' }}>
                                             {c === 'SHIPMENTID' ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -360,19 +468,22 @@ export default function TableView() {
                                             ) : c === 'ROUTE' ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                     <div>
-                                                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{row.customer_name || "Unknown"}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}><MapPin size={10} style={{ marginRight: '4px' }}/>{row.customer_city || "—"}</div>
+                                                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{row.customer_name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}><MapPin size={10} style={{ marginRight: '4px' }}/>{row.customer_city}</div>
                                                     </div>
-                                                    <ArrowRight size={14} className="text-muted" strokeWidth={3} />
+                                                    <ArrowRight size={14} strokeWidth={3} />
                                                     <div>
-                                                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{row.receiver_name || "Unknown"}</div>
-                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}><MapPin size={10} style={{ marginRight: '4px' }}/>{row.receiver_city || "—"}</div>
+                                                        <div style={{ fontWeight: '600', color: 'var(--text-main)' }}>{row.receiver_name}</div>
+                                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}><MapPin size={10} style={{ marginRight: '4px' }}/>{row.receiver_city}</div>
                                                     </div>
                                                 </div>
                                             ) : (c === 'CURRENTSTATUS' || c === 'PAYMENTSTATUS') ? (
                                                 <select
                                                     value={row[c] || (c === 'PAYMENTSTATUS' ? 'Pending' : 'Booked')}
-                                                    onChange={(e) => handleStatusUpdate(row.SHIPMENTID || row.PAYMENTID, e.target.value)}
+                                                    onChange={(e) => handleStatusUpdate(
+                                                        table === 'payments' ? row.PAYMENTID : row.SHIPMENTID,
+                                                        e.target.value
+                                                    )}
                                                     className={`status-badge ${getStatusClass(row[c])}`}
                                                     style={{ appearance: 'none', border: 'none', outline: 'none', cursor: 'pointer' }}
                                                 >
@@ -402,118 +513,56 @@ export default function TableView() {
 
                 <style>{`
                   .table-row-hover:hover { background: rgba(0,0,0,0.02); }
-                  .btn-icon-sml { 
-                    width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color);
-                    background: white; color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;
-                  }
+                  .btn-icon-sml { width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border-color); background: white; color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
                   .btn-icon-sml:hover { background: var(--accent-primary); color: white; border-color: var(--accent-primary); }
                   .btn-icon-sml.danger:hover { background: #fee2e2; color: #ef4444; border-color: #fca5a5; }
                 `}</style>
 
-                {}
                 {showModal && (
                     <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
                         <div className="card" style={{ width: '500px', padding: '32px', maxHeight: '90vh', overflowY: 'auto' }}>
-                            <h2 style={{ marginBottom: '24px' }}>Add {table.replace('_', ' ')}</h2>
+                            <h2 style={{ marginBottom: '24px' }}>Add Shipment</h2>
                             <form onSubmit={handleAddRecord}>
-                               {table === 'shipments' ? (
-                                   <>
-                                       <div style={{ marginBottom: '16px' }}>
-                                           <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sender (Customer)</label>
-                                           <p style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', marginBottom: '8px', fontStyle: 'italic' }}>Select existing or create new</p>
-                                           <Select 
-                                               showSearch 
-                                               placeholder="Search for a sender..." 
-                                               optionFilterProp="children"
-                                               value={formData.CUSTOMERID}
-                                               onChange={(val) => setFormData({ ...formData, CUSTOMERID: val })}
-                                               style={{ width: '100%' }}
-                                               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                                               options={customers.map(c => ({ value: c.CUSTOMERID, label: `${c.NAME} (${c.CITY || 'N/A'})` }))}
-                                               dropdownRender={(menu) => (
-                                                   <>
-                                                       {menu}
-                                                       <div style={{ borderTop: '1px solid var(--border-color)', padding: '8px', textAlign: 'center' }}>
-                                                           <button type="button" onClick={() => setIsAddingCustomer(true)} className="btn-primary" style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}>
-                                                               <Plus size={14} style={{ marginRight: '4px' }} /> Add New Customer
-                                                           </button>
-                                                       </div>
-                                                   </>
-                                               )}
-                                           />
-                                       </div>
-                                       <div style={{ marginBottom: '16px' }}>
-                                           <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Receiver</label>
-                                           <p style={{ fontSize: '0.75rem', color: 'var(--accent-primary)', marginBottom: '8px', fontStyle: 'italic' }}>Select existing or create new</p>
-                                           <Select 
-                                               showSearch 
-                                               placeholder="Search for a receiver..." 
-                                               optionFilterProp="children"
-                                               value={formData.RECEIVERID}
-                                               onChange={(val) => setFormData({ ...formData, RECEIVERID: val })}
-                                               style={{ width: '100%' }}
-                                               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                                               options={receivers.map(r => ({ value: r.RECEIVERID, label: `${r.NAME} (${r.CITY || r.PINCODE || 'N/A'})` }))}
-                                               dropdownRender={(menu) => (
-                                                   <>
-                                                       {menu}
-                                                       <div style={{ borderTop: '1px solid var(--border-color)', padding: '8px', textAlign: 'center' }}>
-                                                           <button type="button" onClick={() => setIsAddingReceiver(true)} className="btn-primary" style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}>
-                                                               <Plus size={14} style={{ marginRight: '4px' }} /> Add New Receiver
-                                                           </button>
-                                                       </div>
-                                                   </>
-                                               )}
-                                           />
-                                       </div>
-                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                           <div style={{ marginBottom: '16px' }}>
-                                               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status</label>
-                                               <Select 
-                                                   defaultValue="Booked"
-                                                   onChange={(val) => setFormData({ ...formData, CURRENTSTATUS: val })}
-                                                   style={{ width: '100%' }}
-                                                   options={STATUS_OPTIONS.map(opt => ({ value: opt, label: opt }))}
-                                               />
-                                           </div>
-                                           <div style={{ marginBottom: '16px' }}>
-                                               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Priority</label>
-                                               <Select 
-                                                   defaultValue="Normal"
-                                                   onChange={(val) => setFormData({ ...formData, PRIORITY: val })}
-                                                   style={{ width: '100%' }}
-                                                   options={['Low', 'Normal', 'High', 'Urgent'].map(opt => ({ value: opt, label: opt }))}
-                                               />
-                                           </div>
-                                       </div>
-                                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                                           <div style={{ marginBottom: '16px' }}>
-                                               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Cost (₹)</label>
-                                               <input type="number" step="0.01" name="TOTALCOST" onChange={handleInputChange} className="input-modern" style={{ width: '100%' }} />
-                                           </div>
-                                           <div style={{ marginBottom: '16px' }}>
-                                               <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Booking Date</label>
-                                               <DatePicker 
-                                                   style={{ width: '100%' }} 
-                                                   onChange={(date) => setFormData({ ...formData, BOOKINGDATE: date ? date.format('YYYY-MM-DD') : null })}
-                                               />
-                                           </div>
-                                       </div>
-                                   </>
-                               ) : (
-                                   columns.map((c, idx) => (
-                                       idx === 0 ? null : (
-                                       <div key={c} style={{ marginBottom: '16px' }}>
-                                           <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.replace('_', ' ')}</label>
-                                           <input type="text" name={c} onChange={handleInputChange} className="input-modern" style={{ width: '100%' }} />
-                                       </div>
-                                       )
-                                   ))
-                               )}
-                               <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
-                                   <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 24px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-muted)', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
-                                   <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px 24px' }}>Save Record</button>
-                               </div>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Sender (Customer)</label>
+                                    <Select showSearch placeholder="Search for a sender..." optionFilterProp="children" value={formData.CUSTOMERID} onChange={(val) => setFormData({ ...formData, CUSTOMERID: val })} style={{ width: '100%' }}
+                                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                                        options={customers.map(c => ({ value: c.CUSTOMERID, label: `${c.NAME} (${c.CITY || 'N/A'})` }))}
+                                        dropdownRender={(menu) => (<>{menu}<div style={{ borderTop: '1px solid var(--border-color)', padding: '8px', textAlign: 'center' }}><button type="button" onClick={() => setIsAddingCustomer(true)} className="btn-primary" style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}><Plus size={14} style={{ marginRight: '4px' }} /> Add New Customer</button></div></>)}
+                                    />
+                                </div>
+                                <div style={{ marginBottom: '16px' }}>
+                                    <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Receiver</label>
+                                    <Select showSearch placeholder="Search for a receiver..." optionFilterProp="children" value={formData.RECEIVERID} onChange={(val) => setFormData({ ...formData, RECEIVERID: val })} style={{ width: '100%' }}
+                                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                                        options={receivers.map(r => ({ value: r.RECEIVERID, label: `${r.NAME} (${r.CITY || 'N/A'})` }))}
+                                        dropdownRender={(menu) => (<>{menu}<div style={{ borderTop: '1px solid var(--border-color)', padding: '8px', textAlign: 'center' }}><button type="button" onClick={() => setIsAddingReceiver(true)} className="btn-primary" style={{ width: '100%', padding: '4px', fontSize: '0.8rem' }}><Plus size={14} style={{ marginRight: '4px' }} /> Add New Receiver</button></div></>)}
+                                    />
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Status</label>
+                                        <Select defaultValue="Booked" onChange={(val) => setFormData({ ...formData, CURRENTSTATUS: val })} style={{ width: '100%' }} options={STATUS_OPTIONS.map(opt => ({ value: opt, label: opt }))} />
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Priority</label>
+                                        <Select defaultValue="Normal" onChange={(val) => setFormData({ ...formData, PRIORITY: val })} style={{ width: '100%' }} options={['Low', 'Normal', 'High', 'Urgent'].map(opt => ({ value: opt, label: opt }))} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total Cost (₹)</label>
+                                        <input type="number" step="0.01" name="TOTALCOST" onChange={handleInputChange} className="input-modern" style={{ width: '100%' }} />
+                                    </div>
+                                    <div style={{ marginBottom: '16px' }}>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Booking Date</label>
+                                        <DatePicker style={{ width: '100%' }} onChange={(date) => setFormData({ ...formData, BOOKINGDATE: date ? date.toISOString() : null })} />
+                                    </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                                    <button type="button" onClick={() => setShowModal(false)} style={{ padding: '10px 24px', borderRadius: '12px', border: '1px solid var(--border-color)', background: 'transparent', color: 'var(--text-muted)', fontWeight: '600', cursor: 'pointer' }}>Cancel</button>
+                                    <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px 24px' }}>Save Record</button>
+                                </div>
                             </form>
                         </div>
                     </div>
@@ -521,25 +570,18 @@ export default function TableView() {
 
                 <Modal title="Shipment Journey" open={showTimeline} onCancel={() => setShowTimeline(false)} footer={null} centered>
                     {loadingTimeline ? <Spin /> : (
-                      timelineData.length > 0 ? (
-                        <Timeline mode="left" style={{ marginTop: '20px' }}>
-                            {timelineData.map((item, idx) => (
-                                <Timeline.Item 
-                                  key={idx} 
-                                  color={item.status === 'Cancelled' ? 'red' : item.status === 'Delayed' ? 'orange' : 'green'}
-                                >
-                                    <div style={{ fontWeight: '700', color: item.status === 'Cancelled' ? '#ef4444' : item.status === 'Delayed' ? '#f59e0b' : 'inherit' }}>
-                                      {item.status}
-                                    </div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.location} • {dayjs(item.timestamp).format('MMM DD, HH:mm')}</div>
-                                </Timeline.Item>
-                            ))}
-                        </Timeline>
-                      ) : (
-                        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                            No tracking updates available for this shipment yet.
-                        </div>
-                      )
+                        timelineData.length > 0 ? (
+                            <Timeline mode="left" style={{ marginTop: '20px' }}>
+                                {timelineData.map((item, idx) => (
+                                    <Timeline.Item key={idx} color={item.status === 'Cancelled' ? 'red' : item.status === 'Delayed' ? 'orange' : 'green'}>
+                                        <div style={{ fontWeight: '700', color: item.status === 'Cancelled' ? '#ef4444' : item.status === 'Delayed' ? '#f59e0b' : 'inherit' }}>{item.status}</div>
+                                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.location} • {dayjs(item.timestamp).format('MMM DD, HH:mm')}</div>
+                                    </Timeline.Item>
+                                ))}
+                            </Timeline>
+                        ) : (
+                            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>No tracking updates available yet.</div>
+                        )
                     )}
                 </Modal>
 
@@ -594,18 +636,12 @@ export default function TableView() {
                         {table === 'payments' ? (
                             <>
                                 <Form.Item name="PAYMENTSTATUS" label="Payment Status">
-                                    <Select>
-                                        {['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}
-                                    </Select>
+                                    <Select>{['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select>
                                 </Form.Item>
                                 <Form.Item name="PAYMENTMETHOD" label="Payment Method">
-                                    <Select>
-                                        {['UPI', 'Card', 'Cash', 'Not Set'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}
-                                    </Select>
+                                    <Select>{['UPI', 'Card', 'Cash', 'Not Set'].map(opt => <Select.Option key={opt} value={opt}>{opt}</Select.Option>)}</Select>
                                 </Form.Item>
-                                <Form.Item name="TRANSACTIONID" label="Transaction ID">
-                                    <Input placeholder="e.g. TXN12345678" />
-                                </Form.Item>
+                                <Form.Item name="TRANSACTIONID" label="Transaction ID"><Input placeholder="e.g. TXN12345678" /></Form.Item>
                                 <Form.Item name="SHIPMENTID" label="Shipment ID" hidden><Input /></Form.Item>
                             </>
                         ) : (
