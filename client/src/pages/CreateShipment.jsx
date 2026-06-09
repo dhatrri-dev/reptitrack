@@ -6,6 +6,10 @@ import { CheckCircle, AlertCircle, User, MapPin, Shield } from 'lucide-react';
 export default function CreateShipment() {
     const navigate = useNavigate();
     const customerId = localStorage.getItem('customerId');
+    const role = localStorage.getItem('role');
+    const isAdmin = role === 'admin';
+    const [selectedCustomerId, setSelectedCustomerId] = useState(customerId);
+    const [customers, setCustomers] = useState([]);
     
     const [serviceTypes, setServiceTypes] = useState([
         { SERVICETYPEID: 1, SERVICENAME: 'Standard', DELIVERYDAYS: 5 },
@@ -33,13 +37,26 @@ export default function CreateShipment() {
     const [error, setError] = useState(null);
 
     useEffect(() => {
+        const fetchCustomers = async () => {
+            if (!isAdmin) return;
+            try {
+                const { data, error } = await supabase
+                    .from('customer')
+                    .select('CUSTOMERID, NAME, STREET, EMAIL, customer_pincode:PINCODE(CITY, STATE, PINCODE)');
+                if (error) throw error;
+                setCustomers(data);
+            } catch (err) {
+                console.error('Failed to fetch customers', err.message);
+            }
+        };
+
         const fetchSender = async () => {
-            if (!customerId) return;
+            if (!selectedCustomerId) return;
             try {
                 const { data, error } = await supabase
                     .from('customer')
                     .select('NAME, STREET, EMAIL, customer_pincode:PINCODE(CITY, STATE, PINCODE)')
-                    .eq('CUSTOMERID', customerId)
+                    .eq('CUSTOMERID', selectedCustomerId)
                     .single();
                 if (error) throw error;
                 setSenderInfo(data);
@@ -70,9 +87,10 @@ export default function CreateShipment() {
             }
         };
 
+        fetchCustomers();
         fetchSender();
         fetchServices();
-    }, [customerId]);
+    }, [selectedCustomerId, isAdmin]);
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -89,7 +107,7 @@ export default function CreateShipment() {
             // Use the atomic RPC function that handles everything in one transaction:
             // Creates receiver, calculates cost, creates shipment, tracking entry, and payment record
             const { data: shipmentId, error: rpcError } = await supabase.rpc('create_shipment_with_receiver', {
-                p_customer_id: parseInt(customerId),
+                p_customer_id: parseInt(selectedCustomerId),
                 p_sender_street: formData.senderStreet || null,
                 p_sender_pincode: formData.senderPincode ? parseInt(formData.senderPincode) : null,
                 p_sender_city: formData.senderCity || null,
@@ -147,11 +165,27 @@ export default function CreateShipment() {
                             <h3 style={{ fontSize: '1.3rem', fontWeight: '600' }}>Your Details (Sender)</h3>
                         </div>
 
-                        {senderInfo && (
-                            <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-body)', borderRadius: '10px', fontSize: '0.9rem' }}>
-                                <span style={{ color: 'var(--text-muted)' }}>Booking as: </span>
-                                <strong style={{ color: 'var(--text-main)' }}>{senderInfo.NAME}</strong>
+                        {isAdmin ? (
+                            <div style={{ marginBottom: '20px' }}>
+                                <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '600' }}>Select Customer</label>
+                                <select 
+                                    value={selectedCustomerId || ''}
+                                    onChange={(e) => setSelectedCustomerId(e.target.value)}
+                                    style={{ width: '100%', height: '56px', padding: '0 18px', borderRadius: '12px', background: 'var(--bg-body)', border: '2px solid var(--border-color)', color: 'var(--text-main)', cursor: 'pointer', marginBottom: '16px' }}
+                                >
+                                    <option value="" disabled>Select a customer</option>
+                                    {customers.map(c => (
+                                        <option key={c.CUSTOMERID} value={c.CUSTOMERID}>{c.NAME} ({c.EMAIL})</option>
+                                    ))}
+                                </select>
                             </div>
+                        ) : (
+                            senderInfo && (
+                                <div style={{ marginBottom: '20px', padding: '12px', background: 'var(--bg-body)', borderRadius: '10px', fontSize: '0.9rem' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Booking as: </span>
+                                    <strong style={{ color: 'var(--text-main)' }}>{senderInfo.NAME}</strong>
+                                </div>
+                            )
                         )}
 
                         <div style={{ marginBottom: '16px' }}>

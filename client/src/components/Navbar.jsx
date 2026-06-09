@@ -12,7 +12,8 @@ import {
   Moon,
   Sun,
   ChevronDown,
-  PlusCircle
+  PlusCircle,
+  Home
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -32,6 +33,7 @@ const Navbar = ({ logout, role }) => {
   const navItems = role === 'admin' ? [
     { path: '/', label: 'Dashboard', icon: BarChart3 },
     { path: '/customers', label: 'Customers', icon: Users },
+    { path: '/receivers', label: 'Receivers', icon: Home },
     { path: '/tables', label: 'Shipments', icon: Package },
     { path: '/payments', label: 'Payments', icon: CreditCard },
     { path: '/reports', label: 'Reports', icon: ClipboardList },

@@ -13,6 +13,7 @@ import UserManagement from './pages/UserManagement';
 import MyShipments from './pages/MyShipments';
 import CreateShipment from './pages/CreateShipment';
 import TrackingPage from './pages/TrackingPage';
+import ReceiverRegistry from './pages/ReceiverRegistry';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -92,6 +93,7 @@ function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/tables" element={<TableView />} />
                   <Route path="/customers" element={<CustomerProfiles />} />
+                  <Route path="/receivers" element={<ReceiverRegistry />} />
                   <Route path="/payments" element={<PaymentTracker />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/track" element={<TrackingPage />} />

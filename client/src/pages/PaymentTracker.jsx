@@ -13,7 +13,8 @@ const getStatusStyle = (status) => STATUS_CONFIG[status] || { color: '#6b7280', 
 
 export default function PaymentTracker() {
     const [payments, setPayments] = useState([]);
-    const [summary, setSummary] = useState(null);
+    const [customers, setCustomers] = useState([]);
+    const [selectedCustomer, setSelectedCustomer] = useState('All');
     const [filter, setFilter] = useState('All');
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
@@ -28,7 +29,7 @@ export default function PaymentTracker() {
                 .from('payment')
                 .select(`
                     paymentid, paymentdate, paymentmethod, paymentstatus, transactionid, shipmentid,
-                    shipment:shipmentid ( totalcost, customer:customerid ( name ) )
+                    shipment:shipmentid ( totalcost, customer:customerid ( CUSTOMERID, NAME ) )
                 `)
                 .order('paymentid', { ascending: false });
             if (error) throw error;
@@ -40,17 +41,17 @@ export default function PaymentTracker() {
                 PAYMENTSTATUS: p.paymentstatus,
                 TRANSACTIONID: p.transactionid,
                 SHIPMENTID: p.shipmentid,
-                CUSTOMER_NAME: p.shipment?.customer?.name || '—',
+                CUSTOMERID: p.shipment?.customer?.CUSTOMERID || null,
+                CUSTOMER_NAME: p.shipment?.customer?.NAME || '—',
                 AMOUNT: p.shipment?.totalcost || 0
             }));
 
             setPayments(processed);
 
-            const total = processed.length;
-            const totalRevenue  = processed.reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0);
-            const paidRevenue   = processed.filter(p => p.PAYMENTSTATUS === 'Paid' || p.PAYMENTSTATUS === 'Completed').reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0);
-            const pendingRevenue = processed.filter(p => p.PAYMENTSTATUS === 'Pending').reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0);
-            setSummary({ total, totalRevenue, paidRevenue, pendingRevenue });
+            const { data: customerData } = await supabase.from('customer').select('CUSTOMERID, NAME');
+            if (customerData) {
+                setCustomers(customerData);
+            }
         } catch (err) {
             console.error('Failed to load payments:', err);
         } finally {
@@ -84,7 +85,21 @@ export default function PaymentTracker() {
         }
     };
 
-    const filtered = payments.filter(p => {
+    const customerFiltered = payments.filter(p => {
+        if (selectedCustomer !== 'All') {
+            return p.CUSTOMERID === parseInt(selectedCustomer);
+        }
+        return true;
+    });
+
+    const computedStats = {
+        total: customerFiltered.length,
+        totalRevenue: customerFiltered.reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0),
+        paidRevenue: customerFiltered.filter(p => p.PAYMENTSTATUS === 'Paid' || p.PAYMENTSTATUS === 'Completed').reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0),
+        pendingRevenue: customerFiltered.filter(p => p.PAYMENTSTATUS === 'Pending').reduce((sum, p) => sum + (parseFloat(p.AMOUNT) || 0), 0)
+    };
+
+    const filtered = customerFiltered.filter(p => {
         let matchesFilter = filter === 'All';
         if (filter === 'Paid') matchesFilter = p.PAYMENTSTATUS === 'Paid' || p.PAYMENTSTATUS === 'Completed';
         else if (filter !== 'All') matchesFilter = p.PAYMENTSTATUS === filter;
@@ -95,12 +110,12 @@ export default function PaymentTracker() {
 
     const fmt = (val) => val != null ? `₹${parseFloat(val).toFixed(2)}` : '₹0.00';
 
-    const statCards = summary ? [
-        { label: 'Total Payments', value: summary.total || 0,            icon: <CreditCard size={28} strokeWidth={1.5} />, color: '#8cc63f', sub: 'All records' },
-        { label: 'Total Revenue',  value: fmt(summary.totalRevenue),      icon: <DollarSign size={28} strokeWidth={1.5} />, color: '#10b981', sub: 'All time' },
-        { label: 'Collected',      value: fmt(summary.paidRevenue),       icon: <CheckCircle size={28} strokeWidth={1.5} />, color: '#3b82f6', sub: 'Paid / Completed' },
-        { label: 'Pending',        value: fmt(summary.pendingRevenue),    icon: <Clock size={28} strokeWidth={1.5} />,      color: '#f59e0b', sub: 'Awaiting payment' },
-    ] : [];
+    const statCards = [
+        { label: 'Total Payments', value: computedStats.total || 0,            icon: <CreditCard size={28} strokeWidth={1.5} />, color: '#8cc63f', sub: 'All records' },
+        { label: 'Total Revenue',  value: fmt(computedStats.totalRevenue),      icon: <DollarSign size={28} strokeWidth={1.5} />, color: '#10b981', sub: 'All time' },
+        { label: 'Collected',      value: fmt(computedStats.paidRevenue),       icon: <CheckCircle size={28} strokeWidth={1.5} />, color: '#3b82f6', sub: 'Paid / Completed' },
+        { label: 'Pending',        value: fmt(computedStats.pendingRevenue),    icon: <Clock size={28} strokeWidth={1.5} />,      color: '#f59e0b', sub: 'Awaiting payment' },
+    ];
 
     return (
         <div style={{ position: 'relative' }}>
@@ -111,7 +126,7 @@ export default function PaymentTracker() {
                 <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '1rem' }}>Monitor all payments, revenue, and outstanding balances in real time.</p>
             </div>
 
-            {summary && (
+            {computedStats && (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '16px', marginBottom: '32px' }}>
                     {statCards.map(card => (
                         <div key={card.label} className="card stat-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '8px', transition: 'all 0.3s ease' }}>
@@ -135,17 +150,30 @@ export default function PaymentTracker() {
                         <button key={f.id} onClick={() => setFilter(f.id)} style={{ padding: '14px 28px', borderRadius: '18px', fontFamily: 'inherit', fontWeight: '700', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s', background: filter === f.id ? 'var(--accent-primary)' : 'var(--bg-card)', color: filter === f.id ? 'white' : 'var(--text-muted)', boxShadow: filter === f.id ? '0 6px 16px rgba(140,198,63,0.3)' : 'var(--shadow-soft)', border: filter === f.id ? '2px solid var(--accent-primary)' : '2px solid var(--border-color)' }}>
                             {f.label}
                             <span style={{ marginLeft: '10px', opacity: 0.8, fontSize: '0.8rem', fontWeight: '500' }}>
-                                {f.id === 'All' ? payments.length : f.id === 'Paid' ? payments.filter(p => p.PAYMENTSTATUS === 'Paid' || p.PAYMENTSTATUS === 'Completed').length : payments.filter(p => p.PAYMENTSTATUS === f.id).length}
+                                {f.id === 'All' ? customerFiltered.length : f.id === 'Paid' ? customerFiltered.filter(p => p.PAYMENTSTATUS === 'Paid' || p.PAYMENTSTATUS === 'Completed').length : customerFiltered.filter(p => p.PAYMENTSTATUS === f.id).length}
                             </span>
                         </button>
                     ))}
                 </div>
-                <div style={{ position: 'relative' }}>
-                    <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-                    <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by ID, customer, method..."
-                        style={{ padding: '10px 14px 10px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem', background: 'var(--bg-card)', color: 'var(--text-main)', width: '260px' }}
-                        onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
-                        onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'} />
+                <div style={{ display: 'flex', gap: '12px', position: 'relative' }}>
+                    <select 
+                        value={selectedCustomer} 
+                        onChange={(e) => setSelectedCustomer(e.target.value)}
+                        style={{ padding: '10px 14px', borderRadius: '12px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem', background: 'var(--bg-card)', color: 'var(--text-main)', cursor: 'pointer' }}
+                    >
+                        <option value="All">All Customers</option>
+                        {customers.map(c => (
+                            <option key={c.CUSTOMERID} value={c.CUSTOMERID}>{c.NAME}</option>
+                        ))}
+                    </select>
+
+                    <div style={{ position: 'relative' }}>
+                        <Search size={18} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..."
+                            style={{ padding: '10px 14px 10px 42px', borderRadius: '12px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'inherit', fontSize: '0.9rem', background: 'var(--bg-card)', color: 'var(--text-main)', width: '220px' }}
+                            onFocus={(e) => e.target.style.borderColor = 'var(--accent-primary)'}
+                            onBlur={(e) => e.target.style.borderColor = 'var(--border-color)'} />
+                    </div>
                 </div>
             </div>
 
