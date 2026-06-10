@@ -14,6 +14,7 @@ import MyShipments from './pages/MyShipments';
 import CreateShipment from './pages/CreateShipment';
 import TrackingPage from './pages/TrackingPage';
 import ReceiverRegistry from './pages/ReceiverRegistry';
+import CourierManagement from './pages/CourierManagement';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -94,6 +95,7 @@ function App() {
                   <Route path="/tables" element={<TableView />} />
                   <Route path="/customers" element={<CustomerProfiles />} />
                   <Route path="/receivers" element={<ReceiverRegistry />} />
+                  <Route path="/couriers" element={<CourierManagement />} />
                   <Route path="/payments" element={<PaymentTracker />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/track" element={<TrackingPage />} />

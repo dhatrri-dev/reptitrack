@@ -48,6 +48,7 @@ export default function TableView() {
     const [statusFilter, setStatusFilter] = useState('');
     const [customers, setCustomers] = useState([]);
     const [receivers, setReceivers] = useState([]);
+    const [couriers, setCouriers] = useState([]);
     // eslint-disable-next-line no-unused-vars
     const [serviceTypes, setServiceTypes] = useState([]);
     const [isAddingCustomer, setIsAddingCustomer] = useState(false);
@@ -70,9 +71,10 @@ export default function TableView() {
                 let query = supabase
                     .from('shipment')
                     .select(`
-                        shipmentid, bookingdate, currentstatus, priority, totalcost, customerid, receiverid,
+                        shipmentid, bookingdate, currentstatus, priority, totalcost, customerid, receiverid, courierid,
                         customer:customerid ( name, customer_pincode:pincode ( city ) ),
-                        receiver:receiverid ( name, receiver_pincode:pincode ( city ) )
+                        receiver:receiverid ( name, receiver_pincode:pincode ( city ) ),
+                        courier:courierid ( name )
                     `);
                 if (statusFilter) query = query.eq('currentstatus', statusFilter);
                 const { data: resData, error } = await query;
@@ -88,7 +90,9 @@ export default function TableView() {
                     customer_name: row.customer?.name || '—',
                     customer_city: row.customer?.customer_pincode?.city || '—',
                     receiver_name: row.receiver?.name || '—',
-                    receiver_city: row.receiver?.receiver_pincode?.city || '—'
+                    receiver_city: row.receiver?.receiver_pincode?.city || '—',
+                    courier_name: row.courier?.name || 'Unassigned',
+                    COURIERID: row.courierid
                 }));
 
                 if (searchTerm) {
@@ -169,12 +173,15 @@ export default function TableView() {
     useEffect(() => {
         fetchData();
         if (table === 'shipments') {
-            setSchema(['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']);
+            setSchema(['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'COURIER', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']);
             supabase.from('customer').select('customerid, name, customer_pincode:pincode(city)')
                 .then(({ data }) => setCustomers((data || []).map(c => ({ CUSTOMERID: c.customerid, NAME: c.name, CITY: c.customer_pincode?.city }))))
                 .catch(err => console.error(err));
             supabase.from('receiver').select('receiverid, name, receiver_pincode:pincode(city)')
                 .then(({ data }) => setReceivers((data || []).map(r => ({ RECEIVERID: r.receiverid, NAME: r.name, CITY: r.receiver_pincode?.city }))))
+                .catch(err => console.error(err));
+            supabase.from('courier').select('courierid, name')
+                .then(({ data }) => setCouriers((data || []).map(c => ({ COURIERID: c.courierid, NAME: c.name }))))
                 .catch(err => console.error(err));
             supabase.from('service_type').select('servicetypeid, servicename')
                 .then(({ data }) => setServiceTypes(data || []))
@@ -276,6 +283,19 @@ export default function TableView() {
         } catch (err) {
             console.error('Error updating status:', err);
             message.error('Error updating status');
+        }
+    };
+
+    const handleCourierAssign = async (id, courierId) => {
+        try {
+            const val = courierId ? parseInt(courierId) : null;
+            const { error } = await supabase.from('shipment').update({ courierid: val }).eq('shipmentid', id);
+            if (error) throw error;
+            message.success('Courier assigned successfully');
+            fetchData();
+        } catch (err) {
+            console.error('Error assigning courier:', err);
+            message.error('Failed to assign courier');
         }
     };
 
@@ -390,7 +410,7 @@ export default function TableView() {
     };
 
     const columns = table === 'shipments'
-        ? ['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']
+        ? ['SHIPMENTID', 'ROUTE', 'CURRENTSTATUS', 'COURIER', 'PRIORITY', 'TOTALCOST', 'BOOKINGDATE']
         : schema;
 
     const STATUS_OPTIONS = ['Booked', 'In Transit', 'Out for Delivery', 'Delivered', 'Delayed', 'Cancelled'];
@@ -488,6 +508,15 @@ export default function TableView() {
                                                     style={{ appearance: 'none', border: 'none', outline: 'none', cursor: 'pointer' }}
                                                 >
                                                     {(c === 'PAYMENTSTATUS' ? ['Pending', 'Paid', 'Completed', 'Failed', 'Overdue'] : STATUS_OPTIONS).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                                </select>
+                                            ) : c === 'COURIER' ? (
+                                                <select
+                                                    value={row.COURIERID || ''}
+                                                    onChange={(e) => handleCourierAssign(row.SHIPMENTID, e.target.value)}
+                                                    style={{ appearance: 'none', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '6px 12px', outline: 'none', cursor: 'pointer', background: row.COURIERID ? '#f0fdf4' : 'var(--bg-body)', color: row.COURIERID ? '#166534' : 'var(--text-muted)', fontWeight: '600' }}
+                                                >
+                                                    <option value="">Unassigned</option>
+                                                    {couriers.map(cour => <option key={cour.COURIERID} value={cour.COURIERID}>{cour.NAME}</option>)}
                                                 </select>
                                             ) : (c === 'TOTALCOST' || c === 'AMOUNT') ? (
                                                 <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>₹{parseFloat(row[c] || 0).toFixed(2)}</span>

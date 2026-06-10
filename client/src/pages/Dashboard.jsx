@@ -29,8 +29,10 @@ const CountUp = ({ value, prefix = '', suffix = '' }) => {
 };
 
 export default function Dashboard() {
-    const [stats, setStats]         = useState(null);
-    const [chartData, setChartData] = useState({ shipmentsPerDay: [], revenuePerDay: [], successRateTrend: [] });
+    const [rawShipments, setRawShipments] = useState([]);
+    const [rawRecentShipments, setRawRecentShipments] = useState([]);
+    const [customers, setCustomers] = useState([]);
+    const [selectedCustomer, setSelectedCustomer] = useState('All');
     const [loading, setLoading]     = useState(true);
     const [error, setError]         = useState(null);
 
@@ -44,58 +46,25 @@ export default function Dashboard() {
                     .select('*', { count: 'exact', head: true });
                 if (custErr) throw custErr;
 
+                const { data: customerData } = await supabase.from('customer').select('customerid, name');
+                if (customerData) setCustomers(customerData);
+
                 const { data: shipments, error: shipErr } = await supabase
                     .from('shipment')
-                    .select('currentstatus, totalcost, bookingdate');
+                    .select('currentstatus, totalcost, bookingdate, customerid, customer:customerid(name)');
                 if (shipErr) throw shipErr;
-
-                let delivered = 0, overdue = 0, outForDelivery = 0, inTransit = 0, booked = 0, cancelled = 0, totalRevenue = 0;
-                shipments.forEach(s => {
-                    totalRevenue += parseFloat(s.totalcost) || 0;
-                    const status = s.currentstatus;
-                    if (status === 'Delivered') delivered++;
-                    else if (status === 'Delayed') overdue++;
-                    else if (status === 'Out for Delivery') outForDelivery++;
-                    else if (status === 'In Transit') inTransit++;
-                    else if (status === 'Booked') booked++;
-                    else if (status === 'Cancelled') cancelled++;
-                });
-
-                const totalShipments = shipments.length;
-                const successRate = totalShipments > 0 ? ((delivered / totalShipments) * 100).toFixed(1) : '0.0';
-
-                setStats({ totalCustomers: totalCustomers || 0, totalShipments, delivered, overdue, outForDelivery, inTransit, booked, cancelled, totalRevenue, successRate });
+                setRawShipments(shipments || []);
 
                 const thirtyDaysAgo = new Date();
                 thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
                 const { data: recentShipments, error: chartErr } = await supabase
                     .from('shipment')
-                    .select('bookingdate, currentstatus, totalcost')
+                    .select('bookingdate, currentstatus, totalcost, customerid')
                     .gte('bookingdate', thirtyDaysAgo.toISOString())
                     .order('bookingdate', { ascending: true });
                 if (chartErr) throw chartErr;
-
-                const dailyMap = {};
-                recentShipments.forEach(s => {
-                    const dateStr = dayjs(s.bookingdate).format('MMM DD');
-                    const dateKey = dayjs(s.bookingdate).format('YYYY-MM-DD');
-                    if (!dailyMap[dateKey]) dailyMap[dateKey] = { date: dateStr, count: 0, revenue: 0, deliveredCount: 0 };
-                    dailyMap[dateKey].count += 1;
-                    dailyMap[dateKey].revenue += parseFloat(s.totalcost) || 0;
-                    if (s.currentstatus === 'Delivered') dailyMap[dateKey].deliveredCount += 1;
-                });
-
-                const sortedKeys = Object.keys(dailyMap).sort();
-                const shipmentsPerDay = [], revenuePerDay = [], successRateTrend = [];
-                sortedKeys.forEach(k => {
-                    const d = dailyMap[k];
-                    shipmentsPerDay.push({ date: d.date, count: d.count });
-                    revenuePerDay.push({ date: d.date, revenue: parseFloat(d.revenue.toFixed(2)) });
-                    successRateTrend.push({ date: d.date, rate: d.count > 0 ? parseFloat(((d.deliveredCount / d.count) * 100).toFixed(1)) : 0.0 });
-                });
-
-                setChartData({ shipmentsPerDay, revenuePerDay, successRateTrend });
+                setRawRecentShipments(recentShipments || []);
             } catch (err) {
                 console.error('[Dashboard Error]', err);
                 setError(err.message || 'Failed to connect to Supabase');
@@ -106,9 +75,63 @@ export default function Dashboard() {
         load();
     }, []);
 
-    const lineData = chartData.shipmentsPerDay || [];
-    const revenueData = chartData.revenuePerDay || [];
-    const successData = chartData.successRateTrend || [];
+    const filteredShipments = rawShipments.filter(s => selectedCustomer === 'All' || s.customerid === parseInt(selectedCustomer));
+    const filteredRecent = rawRecentShipments.filter(s => selectedCustomer === 'All' || s.customerid === parseInt(selectedCustomer));
+
+    let delivered = 0, overdue = 0, outForDelivery = 0, inTransit = 0, booked = 0, cancelled = 0, totalRevenue = 0;
+    filteredShipments.forEach(s => {
+        totalRevenue += parseFloat(s.totalcost) || 0;
+        const status = s.currentstatus;
+        if (status === 'Delivered') delivered++;
+        else if (status === 'Delayed') overdue++;
+        else if (status === 'Out for Delivery') outForDelivery++;
+        else if (status === 'In Transit') inTransit++;
+        else if (status === 'Booked') booked++;
+        else if (status === 'Cancelled') cancelled++;
+    });
+
+    const totalShipments = filteredShipments.length;
+    const successRate = totalShipments > 0 ? ((delivered / totalShipments) * 100).toFixed(1) : '0.0';
+
+    const stats = { 
+        totalCustomers: selectedCustomer === 'All' ? customers.length : 1, 
+        totalShipments, delivered, overdue, outForDelivery, inTransit, booked, cancelled, totalRevenue, successRate 
+    };
+
+    const dailyMap = {};
+    filteredRecent.forEach(s => {
+        const dateStr = dayjs(s.bookingdate).format('MMM DD');
+        const dateKey = dayjs(s.bookingdate).format('YYYY-MM-DD');
+        if (!dailyMap[dateKey]) dailyMap[dateKey] = { date: dateStr, count: 0, revenue: 0, deliveredCount: 0 };
+        dailyMap[dateKey].count += 1;
+        dailyMap[dateKey].revenue += parseFloat(s.totalcost) || 0;
+        if (s.currentstatus === 'Delivered') dailyMap[dateKey].deliveredCount += 1;
+    });
+
+    const sortedKeys = Object.keys(dailyMap).sort();
+    const shipmentsPerDay = [], revenuePerDay = [], successRateTrend = [];
+    sortedKeys.forEach(k => {
+        const d = dailyMap[k];
+        shipmentsPerDay.push({ date: d.date, count: d.count });
+        revenuePerDay.push({ date: d.date, revenue: parseFloat(d.revenue.toFixed(2)) });
+        successRateTrend.push({ date: d.date, rate: d.count > 0 ? parseFloat(((d.deliveredCount / d.count) * 100).toFixed(1)) : 0.0 });
+    });
+
+    const lineData = shipmentsPerDay;
+    const revenueData = revenuePerDay;
+    const successData = successRateTrend;
+
+    const customerRev = {};
+    rawShipments.forEach(s => {
+        if (!s.customerid) return;
+        const cName = s.customer?.name || 'Unknown';
+        if (!customerRev[cName]) customerRev[cName] = 0;
+        customerRev[cName] += parseFloat(s.totalcost) || 0;
+    });
+    const topCustomersList = Object.entries(customerRev)
+        .map(([name, rev]) => ({ name, revenue: rev }))
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
 
     const barData = [
         { name: 'Booked',           count: stats?.booked || 0,         color: '#f59e0b' },
@@ -160,11 +183,23 @@ export default function Dashboard() {
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '1rem', margin: 0, lineHeight: 1.5 }}>Live analytic breakdown tracking your logistics data.</p>
                 </div>
-                {error && (
-                    <div style={{ background: '#fee2e2', border: '1px solid #ef4444', color: '#ef4444', padding: '12px 24px', borderRadius: '14px', fontSize: '0.9rem', maxWidth: '360px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <AlertCircle size={20} />{error}
-                    </div>
-                )}
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    {error && (
+                        <div style={{ background: '#fee2e2', border: '1px solid #ef4444', color: '#ef4444', padding: '12px 24px', borderRadius: '14px', fontSize: '0.9rem', maxWidth: '360px', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <AlertCircle size={20} />{error}
+                        </div>
+                    )}
+                    <select 
+                        value={selectedCustomer} 
+                        onChange={(e) => setSelectedCustomer(e.target.value)}
+                        style={{ padding: '12px 18px', borderRadius: '12px', border: '2px solid var(--border-color)', outline: 'none', fontFamily: 'inherit', fontSize: '0.95rem', background: 'var(--bg-card)', color: 'var(--text-main)', cursor: 'pointer', fontWeight: '600', boxShadow: 'var(--shadow-soft)' }}
+                    >
+                        <option value="All">Global Overview</option>
+                        {customers.map(c => (
+                            <option key={c.customerid} value={c.customerid}>{c.name}</option>
+                        ))}
+                    </select>
+                </div>
             </motion.div>
 
             <motion.div variants={itemVariants} style={{ marginBottom: '32px' }}>
@@ -271,6 +306,24 @@ export default function Dashboard() {
                         </BarChart>
                     </ResponsiveContainer>
                 </motion.div>
+
+                {selectedCustomer === 'All' && (
+                    <motion.div variants={itemVariants} className="card" style={{ padding: '24px', height: '400px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '32px' }}>
+                            <div style={{ padding: '8px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '10px', color: '#f59e0b' }}><Users size={18} /></div>
+                            <h3 style={{ margin: 0, color: 'var(--text-main)', fontSize: '1.1rem', fontWeight: '700' }}>Top Customers by Revenue</h3>
+                        </div>
+                        <ResponsiveContainer width="100%" height="75%">
+                            <BarChart data={topCustomersList} layout="vertical" margin={{ left: 20 }}>
+                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="var(--border-color)" />
+                                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'var(--text-main)', fontSize: 12, fontWeight: 600 }} dx={-10} width={80} />
+                                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(245, 158, 11, 0.05)' }} />
+                                <Bar dataKey="revenue" fill="#f59e0b" radius={[0, 4, 4, 0]} barSize={20} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </motion.div>
+                )}
             </motion.div>
 
             <style>{`

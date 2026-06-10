@@ -13,7 +13,8 @@ import {
   Sun,
   ChevronDown,
   PlusCircle,
-  Home
+  Home,
+  Truck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -34,6 +35,7 @@ const Navbar = ({ logout, role }) => {
     { path: '/', label: 'Dashboard', icon: BarChart3 },
     { path: '/customers', label: 'Customers', icon: Users },
     { path: '/receivers', label: 'Receivers', icon: Home },
+    { path: '/couriers', label: 'Couriers', icon: Truck },
     { path: '/tables', label: 'Shipments', icon: Package },
     { path: '/payments', label: 'Payments', icon: CreditCard },
     { path: '/reports', label: 'Reports', icon: ClipboardList },
